@@ -212,7 +212,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
         <table className="table-auto border-collapse w-full">
           <tbody>
             <tr>
-              <td className="flex items-center border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white">
+              <td className="flex items-center border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white min-w-[200px]">
                 {leftSideTeam == matchData.firstTeamName
                   ? matchData.playerOne
                   : matchData.playerTwo}
@@ -221,7 +221,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
               {tableData.map((row, index) => (
                 <td
                   key={index}
-                  className="border border-[#5ea0b8] text-center px-2"
+                  className="border border-[#5ea0b8] text-center px-4 py-2 min-w-[40px]"
                 >
                   <div className="flex flex-col items-center">
                     {/* Always show score if it exists */}
@@ -257,6 +257,15 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
                   key={index}
                   className="border border-[#5ea0b8] text-center px-2"
                 >
+                  {row.isMisconduct &&
+                    row.misconductPlayer === (
+                      leftSideTeam === matchData.firstTeamName
+                        ? matchData.playerOne
+                        : matchData.playerTwo
+                    ) &&
+                    (row.misconductType === 'F' || row.misconductType === 'I') && (
+                      <div className="text-sm font-bold">R</div>
+                    )}
                 </td>
               ))}
             </tr>
@@ -281,7 +290,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
             ) : null}
 
             <tr>
-              <td className="flex items-center border border-t-4 border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white">
+              <td className="border border-[#5ea0b8] border-t-4 px-4 py-2 sticky left-0 bg-white min-w-[200px] text-black border-l-0 border-r-0">
+                {/* <td className="flex items-center border border-t-4 border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white min-w-[200px]"> */}
+
                 {leftSideTeam == matchData.firstTeamName
                   ? matchData.playerTwo
                   : matchData.playerOne}
@@ -290,7 +301,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
               {tableData.map((row, index) => (
                 <td
                   key={index}
-                  className="border border-t-4 border-[#5ea0b8] text-center"
+                  className="border border-[#5ea0b8] border-t-4 text-center px-4 py-2 min-w-[40px]"
                 >
                   <div className="flex flex-col items-center">
                     {/* Always show score if it exists */}
