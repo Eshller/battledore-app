@@ -4,6 +4,7 @@ import { useService } from "../ContextAPI/axios";
 import ScoreSheet from "../components/ScoreSheet.jsx";
 import io from "socket.io-client";
 import Watermark from "../components/Watermark";
+import { toast } from "react-toastify";
 
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
@@ -101,15 +102,24 @@ function ScorePage() {
   }, []);
 
   const handleMisconductSelect = (type, player) => {
-    // Emit misconduct via socket
-    socket.emit("add_misconduct", {
-      matchId: gameId.id,
-      player: player,
-      type: type,
-      timestamp: new Date()
-    });
+    if (!player) {
+      toast.error("Please select a player first");
+      return;
+    }
 
-    // Update local state
+    const misconductData = {
+      matchId: gameId.id,
+      misconduct: {
+        player: player,
+        type: type,
+        timestamp: new Date()
+      }
+    };
+
+    // Emit misconduct via socket
+    socket.emit("add_misconduct", misconductData);
+
+    // Update local state only once
     const newMisconduct = {
       player: player,
       type: type,
@@ -296,6 +306,10 @@ function ScorePage() {
       numberOfShuttlecock: "1",
       status: "reset"
     });
+  };
+
+  const handleMisconductUpdate = (newMisconduct) => {
+    setMisconducts(prev => [...prev, newMisconduct]);
   };
 
   return (
@@ -700,6 +714,7 @@ function ScorePage() {
             selectedPlayer={selectedPlayer}
             misconduct={misconduct}
             misconducts={misconducts}
+            onMisconductUpdate={handleMisconductUpdate}
           />
         </div>
         <footer className="text-center">

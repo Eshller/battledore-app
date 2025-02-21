@@ -53,24 +53,35 @@ io.on("connection", (socket) => {
 
   socket.on("add_misconduct", async (data) => {
     try {
+      if (!data.misconduct?.player?.trim() || !data.misconduct?.type) {
+        console.error("Invalid misconduct data:", data);
+        return;
+      }
+
       const match = await Match.findOne({ _id: data.matchId });
       if (match) {
-        match.misconducts.push({
-          player: data.misconduct.player,
+        const newMisconduct = {
+          player: data.misconduct.player.trim(),
           type: data.misconduct.type,
-          timestamp: data.misconduct.timestamp
-        });
-        await match.save();
+          timestamp: data.misconduct.timestamp || new Date()
+        };
+        
+        // Check for duplicate before adding
+        const isDuplicate = match.misconducts.some(m => 
+          m.player === newMisconduct.player && 
+          m.type === newMisconduct.type && 
+          new Date(m.timestamp).getTime() === new Date(newMisconduct.timestamp).getTime()
+        );
 
-        // Emit the updated misconduct to all clients
-        socket.broadcast.emit("misconduct_updated", {
-          matchId: data.matchId,
-          misconduct: {
-            player: data.misconduct.player,
-            type: data.misconduct.type,
-            timestamp: data.misconduct.timestamp
-          }
-        });
+        if (!isDuplicate) {
+          match.misconducts.push(newMisconduct);
+          await match.save();
+
+          socket.broadcast.emit("misconduct_updated", {
+            matchId: data.matchId,
+            misconduct: newMisconduct
+          });
+        }
       }
     } catch (error) {
       console.error("Error adding misconduct:", error);

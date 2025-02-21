@@ -5,11 +5,13 @@ import io from "socket.io-client";
 
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
-const ScoreSheet = ({ selectedPlayer, misconduct, misconducts }) => {
+const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdate }) => {
+  console.log("misconducts", misconducts)
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
 
   const [tableData, setTableData] = useState([]);
+  // const [misconducts, setMisconducts] = useState([]);
 
   useEffect(() => {
     const initializeTable = () => {
@@ -75,16 +77,8 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts }) => {
       }
     });
 
-    socket.on("misconduct_updated", (data) => {
-      if (data.matchId === gameId.id) {
-        // Force refresh match data to get updated misconducts
-        getMatchData(gameId.id);
-      }
-    });
-
     return () => {
       socket.off("score_updated");
-      socket.off("misconduct_updated");
     };
   }, [gameId.id, tableData]);
 
@@ -93,14 +87,22 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts }) => {
       ? matchData.secondTeamName
       : matchData.firstTeamName;
 
-  const renderMisconducts = (playerName) => {
+  const renderMisconducts = React.useCallback((playerName) => {
     if (!misconducts || !playerName) return null;
 
-    return misconducts
+    const uniqueMisconducts = misconducts.reduce((acc, curr) => {
+      const key = `${curr.player}-${curr.type}-${curr.timestamp}`;
+      if (!acc[key]) {
+        acc[key] = curr;
+      }
+      return acc;
+    }, {});
+
+    return Object.values(uniqueMisconducts)
       .filter(m => m.player === playerName)
       .map((m, index) => (
         <div
-          key={`${m.player}-${m.type}-${index}`}
+          key={`${m.player}-${m.type}-${index}-${m.timestamp}`}
           className="text-center font-inter px-2 inline-block"
         >
           <h1 className={`font-bold text-xl bg-yellow-400 rounded-md w-6 p-0 m-auto my-0 ${m.type === "W" ? "text-yellow-700" :
@@ -128,7 +130,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts }) => {
           </p>
         </div>
       ));
-  };
+  }, [misconducts]);
 
   return (
     <div>
