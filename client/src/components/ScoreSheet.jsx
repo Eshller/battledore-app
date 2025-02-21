@@ -5,45 +5,130 @@ import io from "socket.io-client";
 
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
-const ScoreSheet = ({ selectedPlayer, misconduct }) => {
+const ScoreSheet = ({ selectedPlayer, misconduct, misconducts }) => {
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
 
   const [tableData, setTableData] = useState([]);
 
   useEffect(() => {
-    getMatchData(gameId.id);
-  }, [gameId.id]);
+    const initializeTable = () => {
+      if (matchData) {
+        const firstTeamName = matchData.firstTeamName;
+        const secondTeamName = matchData.secondTeamName;
+
+        // Always start with a fresh initial state
+        const initialState = {
+          firstTeamScore: "0",
+          secondTeamScore: "0",
+          firstTeamName,
+          secondTeamName,
+          scoringTeam: 'start',
+          status: 'initial',
+          timestamp: new Date().toISOString()
+        };
+
+        // Only add scores if they exist and belong to current match
+        if (matchData.scores && matchData.scores.length > 0) {
+          const sortedScores = [...matchData.scores].sort((a, b) => {
+            if (a.timestamp && b.timestamp) {
+              return new Date(a.timestamp) - new Date(b.timestamp);
+            }
+            return 0;
+          });
+
+          setTableData([initialState, ...sortedScores.map((newData) => ({
+            ...newData,
+            firstTeamName,
+            secondTeamName,
+            timestamp: newData.timestamp || newData.createdAt // fallback to createdAt if timestamp not present
+          }))]);
+        } else {
+          // For new matches, only show initial state
+          setTableData([initialState]);
+        }
+      }
+    };
+
+    initializeTable();
+  }, [matchData, gameId.id]);
 
   useEffect(() => {
-    if (matchData?.scores) {
-      const firstTeamName = matchData.firstTeamName;
-      const secondTeamName = matchData.secondTeamName;
-      const combined = matchData?.scores.map((newData) => ({
-        ...newData,
-        firstTeamName,
-        secondTeamName,
-      }));
-      setTableData(combined);
-    }
-  }, [matchData]);
+    const loadMatchData = async () => {
+      await getMatchData(gameId.id);
+    };
+
+    loadMatchData();
+  }, [gameId.id]);
 
   useEffect(() => {
     socket.on("score_updated", (data) => {
       if (data.status === "start") {
-        setTableData((prev) => [...prev, data]);
+        const updatedData = {
+          ...data,
+          scoringTeam: data.firstTeamScore > (tableData[tableData.length - 1]?.firstTeamScore || "0")
+            ? 'first'
+            : 'second',
+          timestamp: new Date().toISOString()
+        };
+        setTableData(prev => [...prev, updatedData]);
+      }
+    });
+
+    socket.on("misconduct_updated", (data) => {
+      if (data.matchId === gameId.id) {
+        // Force refresh match data to get updated misconducts
+        getMatchData(gameId.id);
       }
     });
 
     return () => {
       socket.off("score_updated");
+      socket.off("misconduct_updated");
     };
-  }, []);
+  }, [gameId.id, tableData]);
 
   const leftSideTeam =
     matchData.firstTeamName === matchData.receiver
       ? matchData.secondTeamName
       : matchData.firstTeamName;
+
+  const renderMisconducts = (playerName) => {
+    if (!misconducts || !playerName) return null;
+
+    return misconducts
+      .filter(m => m.player === playerName)
+      .map((m, index) => (
+        <div
+          key={`${m.player}-${m.type}-${index}`}
+          className="text-center font-inter px-2 inline-block"
+        >
+          <h1 className={`font-bold text-xl bg-yellow-400 rounded-md w-6 p-0 m-auto my-0 ${m.type === "W" ? "text-yellow-700" :
+            m.type === "F" ? "text-red-700" :
+              m.type === "R" ? "text-blue-700" :
+                m.type === "S" ? "text-green-700" :
+                  m.type === "O" ? "text-purple-700" :
+                    m.type === "I" ? "text-orange-700" :
+                      m.type === "DIS" ? "text-red-700" :
+                        m.type === "RET" ? "text-blue-700" :
+                          m.type === "C" ? "text-green-700" : null
+            }`}>
+            {m.type}
+          </h1>
+          <p className="font-semibold text-xs">
+            {m.type === "W" ? "Warning" :
+              m.type === "F" ? "Fault" :
+                m.type === "R" ? "Referee Called" :
+                  m.type === "S" ? "Suspension" :
+                    m.type === "O" ? "Overrule" :
+                      m.type === "I" ? "Injury" :
+                        m.type === "DIS" ? "Disqualified" :
+                          m.type === "RET" ? "Retired" :
+                            m.type === "C" ? "Service Court Error" : null}
+          </p>
+        </div>
+      ));
+  };
 
   return (
     <div>
@@ -55,24 +140,18 @@ const ScoreSheet = ({ selectedPlayer, misconduct }) => {
                 {leftSideTeam == matchData.firstTeamName
                   ? matchData.playerOne
                   : matchData.playerTwo}
-                {selectedPlayer === matchData.playerOne ? <div
-                  id={misconduct}
-                  className="text-center font-inter px-4 cursor-pointer"
-                >
-                  <h1 className={`font-bold text-xl text-yellow-700 bg-yellow-400 rounded-md w-6 m-auto ${misconduct === "W" ? "text-yellow-700" : misconduct === "F" ? "text-red-700" : misconduct === "R" ? "text-blue-700" : misconduct === "S" ? "text-green-700" : misconduct === "O" ? "text-purple-700" : misconduct === "I" ? "text-orange-700" : misconduct === "DIS" ? "text-red-700" : misconduct === "DIS" ? "text-red-700" : misconduct === "RET" ? "text-blue-700" : misconduct === "C" ? "text-green-700" : null}`}>
-                    {misconduct}
-                  </h1>
-                  <p className="font-semibold text-xs">{misconduct === "W" ? "Warning" : misconduct === "F" ? "Fault" : misconduct === "R" ? "Referee Called" : misconduct === "S" ? "Suspension" : misconduct === "O" ? "Overrule" : misconduct === "I" ? "Injury" : misconduct === "DIS" ? "Disqualified" : misconduct === "DIS" ? "Disqualified" : misconduct === "RET" ? "Retired" : misconduct === "C" ? "Service Court Error" : null}</p>
-                </div> : null}
+                {renderMisconducts(leftSideTeam == matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)}
               </td>
               {tableData.map((row, index) => (
                 <td
                   key={index}
                   className="border border-[#5ea0b8] text-center px-2"
                 >
-                  {leftSideTeam == matchData.firstTeamName
-                    ? row.secondTeamScore
-                    : row.firstTeamScore}
+                  {index === 0 ? 'S' :
+                    index === 1 ? '0' :  // Show 0 in second column
+                      leftSideTeam === matchData.firstTeamName
+                        ? (row.scoringTeam === 'second' ? row.secondTeamScore : '')
+                        : (row.scoringTeam === 'first' ? row.firstTeamScore : '')}
                 </td>
               ))}
             </tr>
@@ -102,9 +181,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct }) => {
                     key={index}
                     className="border border-[#5ea0b8] text-center"
                   >
-                    {leftSideTeam == matchData.firstTeamName
-                      ? row.secondTeamScore
-                      : row.firstTeamScore}
+                    {leftSideTeam === matchData.firstTeamName
+                      ? (row.scoringTeam === 'second' ? row.secondTeamScore : '')
+                      : (row.scoringTeam === 'first' ? row.firstTeamScore : '')}
                   </td>
                 ))}
               </tr>
@@ -115,25 +194,20 @@ const ScoreSheet = ({ selectedPlayer, misconduct }) => {
                 {leftSideTeam == matchData.firstTeamName
                   ? matchData.playerTwo
                   : matchData.playerOne}
-                {selectedPlayer === matchData.playerTwo ? <div
-                  id={misconduct}
-                  className="text-center font-inter px-4"
-                >
-                  <h1 className="font-bold text-xl text-yellow-700 bg-yellow-400 rounded-md w-6 m-auto">
-                    {misconduct}
-                  </h1>
-                  <p className="font-semibold text-xs">{misconduct === "W" ? "Warning" : misconduct === "F" ? "Fault" : misconduct === "R" ? "Referee Called" : misconduct === "S" ? "Suspension" : misconduct === "O" ? "Overrule" : misconduct === "I" ? "Injury" : misconduct === "DIS" ? "Disqualified" : misconduct === "DIS" ? "Disqualified" : misconduct === "RET" ? "Retired" : misconduct === "C" ? "Service Court Error" : null}</p>
-                </div>
-                  : null}
+                {renderMisconducts(leftSideTeam == matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)}
               </td>
               {tableData.map((row, index) => (
                 <td
                   key={index}
                   className="border border-t-4 border-[#5ea0b8] text-center"
                 >
-                  {leftSideTeam == matchData.firstTeamName
-                    ? row.firstTeamScore
-                    : row.secondTeamScore}
+                  {index === 0 && matchData.server === (leftSideTeam === matchData.firstTeamName
+                    ? matchData.playerTwo
+                    : matchData.playerOne) ? 'S' :
+                    index === 1 ? '0' :  // Show 0 in second column
+                      leftSideTeam === matchData.firstTeamName
+                        ? (row.scoringTeam === 'first' ? row.firstTeamScore : '')
+                        : (row.scoringTeam === 'second' ? row.secondTeamScore : '')}
                 </td>
               ))}
             </tr>
@@ -165,9 +239,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct }) => {
                     key={index}
                     className="border border-[#5ea0b8] text-center"
                   >
-                    {leftSideTeam == matchData.firstTeamName
-                      ? row.firstTeamScore
-                      : row.secondTeamScore}
+                    {leftSideTeam === matchData.firstTeamName
+                      ? (row.scoringTeam === 'second' ? row.secondTeamScore : '')
+                      : (row.scoringTeam === 'first' ? row.firstTeamScore : '')}
                   </td>
                 ))}
               </tr>

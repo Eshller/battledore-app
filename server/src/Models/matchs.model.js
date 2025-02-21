@@ -85,6 +85,11 @@ const matSchema = new Schema(
       required: true,
       trim: true,
     },
+    misconducts: [{
+      player: String,
+      type: String,
+      timestamp: Date
+    }],
   },
   {
     timestamps: true,

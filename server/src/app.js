@@ -50,6 +50,44 @@ io.on("connection", (socket) => {
       socket.broadcast.emit("score_updated", data);
     }
   });
+
+  socket.on("add_misconduct", async (data) => {
+    const match = await Match.findOne({ _id: data.matchId });
+    if (match) {
+      match.misconducts.push({
+        player: data.player,
+        type: data.type,
+        timestamp: new Date()
+      });
+      await match.save();
+
+      // Emit the updated misconduct to all clients
+      socket.broadcast.emit("misconduct_updated", {
+        matchId: data.matchId,
+        misconduct: {
+          player: data.player,
+          type: data.type,
+          timestamp: new Date()
+        }
+      });
+    }
+  });
+
+  socket.on("reset_match", async (data) => {
+    const match = await Match.findOne({ _id: data.Id });
+    if (match) {
+      // Clear scores and misconducts
+      match.scores = [];
+      match.misconducts = [];
+      await match.save();
+
+      // Broadcast reset to all clients
+      socket.broadcast.emit("match_reset", {
+        matchId: data.Id
+      });
+    }
+  });
+
   socket.on("disconnect", () => {});
 });
 

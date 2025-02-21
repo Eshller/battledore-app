@@ -239,6 +239,31 @@ export const BackendProvider = ({ children }) => {
     }
   };
 
+  const saveMisconduct = async (misconductData) => {
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_SERVER}/api/misconducts`,
+        misconductData
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error saving misconduct:", error);
+      throw error;
+    }
+  };
+
+  const getMisconducts = async (matchId) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_SERVER}/api/misconducts/${matchId}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching misconducts:", error);
+      throw error;
+    }
+  };
+
   return (
     <BackendContext.Provider
       value={{
@@ -272,6 +297,8 @@ export const BackendProvider = ({ children }) => {
         getScoresData,
         updateScores,
         removeMatch,
+        saveMisconduct,
+        getMisconducts,
       }}
     >
       {children}

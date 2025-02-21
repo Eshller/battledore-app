@@ -12,8 +12,27 @@ function ScorePage() {
   const gameId = useParams();
   const Navigate = useNavigate();
   useEffect(() => {
-    getMatchData(gameId.id);
-  }, []);
+    const fetchMatchData = async () => {
+      const data = await getMatchData(gameId.id);
+      if (data?.match) {
+        // Set initial scores from match data
+        if (data.match.scores && data.match.scores.length > 0) {
+          const lastScore = data.match.scores[data.match.scores.length - 1];
+          setTeamOneScore(lastScore.firstTeamScore);
+          setTeamTwoScore(lastScore.secondTeamScore);
+          setNumberOfShuttlecock(lastScore.numberOfShuttlecock || "1");
+          setMatchStarted(true);
+        }
+
+        // Set initial misconducts
+        if (data.match.misconducts) {
+          setMisconducts(data.match.misconducts);
+        }
+      }
+    };
+
+    fetchMatchData();
+  }, [gameId.id]);
 
   const [teamOneScore, setTeamOneScore] = useState("0");
   const [teamTwoScore, setTeamTwoScore] = useState("0");
@@ -26,6 +45,7 @@ function ScorePage() {
   const [misconduct, setMisconduct] = useState("");
   const [endMatchConfirmation, setEndMatchConfirmation] = useState(false);
   const [winnerMessage, setWinnerMessage] = useState("");
+  const [misconducts, setMisconducts] = useState([]);
 
   useEffect(() => {
     if (matchData?.scores?.length > 0 && matchData.isPlayed == false) {
@@ -38,21 +58,64 @@ function ScorePage() {
     }
   }, [matchData]);
 
+  useEffect(() => {
+    if (matchData?.misconducts) {
+      setMisconducts(matchData.misconducts);
+    }
+  }, [matchData]);
+
+  // Add socket listener for misconduct updates
+  useEffect(() => {
+    socket.on("misconduct_updated", (data) => {
+      if (data.matchId === gameId.id) {
+        setMisconducts(prev => [...prev, data.misconduct]);
+      }
+    });
+
+    return () => {
+      socket.off("misconduct_updated");
+    };
+  }, [gameId.id]);
+
+  const handleMisconductSelect = (type, player) => {
+    // Emit misconduct via socket
+    socket.emit("add_misconduct", {
+      matchId: gameId.id,
+      player: player,
+      type: type,
+      timestamp: new Date()
+    });
+
+    // Update local state
+    const newMisconduct = {
+      player: player,
+      type: type,
+      timestamp: new Date()
+    };
+    setMisconducts(prev => [...prev, newMisconduct]);
+
+    // Reset misconduct selection state
+    setMisconduct("");
+    setSelectedPlayer("");
+    setMisconductBox(false);
+  };
+
   const handleMisconduct = (e) => {
     setMisconduct(e);
     if (step === 1) {
+      handleMisconductSelect(e, selectedPlayer);
       setStep(2);
     } else {
       setStep(1);
     }
-  }
+  };
 
   const handlePlayerSelect = (e) => {
     setSelectedPlayer(e.target.value);
     sendToScoreSheet(e.target.value);
     setMisconductBox(false);
     setStep(1);
-    alert("Player Marked")
+    // alert("Player Marked")
   };
 
   const sendToScoreSheet = (player) => {
@@ -70,6 +133,7 @@ function ScorePage() {
       numberOfShuttlecock,
       firstTeamName: matchData.firstTeamName,
       secondTeamName: matchData.secondTeamName,
+      timestamp: new Date().toISOString(),
     });
   };
 
@@ -191,6 +255,24 @@ function ScorePage() {
       Navigate("/pastmatches");
       sendScore(teamOneScore, teamTwoScore, "end", winner);
     }
+  };
+
+  const resetMatch = () => {
+    // Reset all relevant state
+    setTeamOneScore("0");
+    setTeamTwoScore("0");
+    setNumberOfShuttlecock("1");
+    setMatchStarted(false);
+    setMisconducts([]);
+
+    // Emit reset event to update all clients
+    socket.emit("reset_match", {
+      Id: gameId.id,
+      firstTeamScore: "0",
+      secondTeamScore: "0",
+      numberOfShuttlecock: "1",
+      status: "reset"
+    });
   };
 
   return (
@@ -433,7 +515,7 @@ function ScorePage() {
           </button>
           <div>
             {matchStarted ? (
-              <div>
+              <div className="flex justify-center gap-4">
                 <button
                   className="text-3xl text-white font-bold rounded-3xl px-5 py-3 bg-red-400 m-4 w-48 flex justify-center items-center shadow-lg"
                   onClick={() => {
@@ -442,13 +524,23 @@ function ScorePage() {
                 >
                   End
                 </button>
+                {/* <button
+                  className="text-3xl text-white font-bold rounded-3xl px-5 py-3 bg-yellow-400 m-4 w-48 flex justify-center items-center shadow-lg"
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to reset the match? This will clear all scores and misconducts.')) {
+                      resetMatch();
+                    }
+                  }}
+                >
+                  Reset
+                </button> */}
               </div>
             ) : (
               <button
                 className="text-xl xl:text-3xl min-w-48 text-white font-bold rounded-lg  xl:rounded-2xl px-5 py-3 bg-green-400 m-4 flex justify-center items-center shadow-lg uppercase"
                 onClick={() => {
                   setMatchStarted(true);
-                  sendScore(teamOneScore, teamTwoScore, "start");
+                  sendScore("0", "0", "start");
                 }}
               >
                 Love All Play
@@ -581,7 +673,11 @@ function ScorePage() {
         </div>
         {/* score table */}
         <div className="w-full md:w-[80%] m-auto">
-          <ScoreSheet selectedPlayer={selectedPlayer} misconduct={misconduct} />
+          <ScoreSheet
+            selectedPlayer={selectedPlayer}
+            misconduct={misconduct}
+            misconducts={misconducts}
+          />
         </div>
         <footer className="text-center">
           <div className="opacity-50 text-5xl md:text-7xl xl:text-9xl">
