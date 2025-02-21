@@ -19,7 +19,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
         const firstTeamName = matchData.firstTeamName;
         const secondTeamName = matchData.secondTeamName;
 
-        // Always start with a fresh initial state
+        // Create initial state only if we have no scores
         const initialState = {
           firstTeamScore: "0",
           secondTeamScore: "0",
@@ -30,9 +30,13 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
           timestamp: new Date().toISOString()
         };
 
-        // Only add scores if they exist and belong to current match
+        // Reset table data completely before adding new data
         if (matchData.scores && matchData.scores.length > 0) {
-          let previousScore = initialState;
+          let previousScore = {
+            firstTeamScore: "0",
+            secondTeamScore: "0"
+          };
+
           const scoreHistory = matchData.scores.map(score => {
             const scoringTeam =
               parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
@@ -56,8 +60,14 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
             return entry;
           });
 
-          setTableData([initialState, ...scoreHistory]);
+          // Only include initialState if we're starting a new match
+          const tableEntries = matchData.scores.length === 0 ?
+            [initialState] :
+            [initialState, ...scoreHistory];
+
+          setTableData(tableEntries);
         } else {
+          // For new matches, only show initial state
           setTableData([initialState]);
         }
       }
@@ -66,14 +76,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
     initializeTable();
   }, [matchData]);
 
-  useEffect(() => {
-    const loadMatchData = async () => {
-      await getMatchData(gameId.id);
-    };
-
-    loadMatchData();
-  }, [gameId.id]);
-
+  // Keep the score_updated listener separate
   useEffect(() => {
     socket.on("score_updated", (data) => {
       if (data.status === "start") {
