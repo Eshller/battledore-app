@@ -14,7 +14,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
   // const [misconducts, setMisconducts] = useState([]);
 
   useEffect(() => {
-    const initializeTable = () => {
+    const initializeTable = async () => {
       if (matchData) {
         const firstTeamName = matchData.firstTeamName;
         const secondTeamName = matchData.secondTeamName;
@@ -32,28 +32,39 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
 
         // Only add scores if they exist and belong to current match
         if (matchData.scores && matchData.scores.length > 0) {
-          const sortedScores = [...matchData.scores].sort((a, b) => {
-            if (a.timestamp && b.timestamp) {
-              return new Date(a.timestamp) - new Date(b.timestamp);
-            }
-            return 0;
+          let previousScore = initialState;
+          const scoreHistory = matchData.scores.map(score => {
+            const scoringTeam =
+              parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
+                ? 'first'
+                : parseInt(score.secondTeamScore) > parseInt(previousScore.secondTeamScore)
+                  ? 'second'
+                  : 'none';
+
+            const entry = {
+              firstTeamScore: score.firstTeamScore,
+              secondTeamScore: score.secondTeamScore,
+              firstTeamName,
+              secondTeamName,
+              scoringTeam,
+              status: 'start',
+              timestamp: score.createdAt || new Date().toISOString(),
+              numberOfShuttlecock: score.numberOfShuttlecock
+            };
+
+            previousScore = entry;
+            return entry;
           });
 
-          setTableData([initialState, ...sortedScores.map((newData) => ({
-            ...newData,
-            firstTeamName,
-            secondTeamName,
-            timestamp: newData.timestamp || newData.createdAt // fallback to createdAt if timestamp not present
-          }))]);
+          setTableData([initialState, ...scoreHistory]);
         } else {
-          // For new matches, only show initial state
           setTableData([initialState]);
         }
       }
     };
 
     initializeTable();
-  }, [matchData, gameId.id]);
+  }, [matchData]);
 
   useEffect(() => {
     const loadMatchData = async () => {
@@ -66,21 +77,30 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
   useEffect(() => {
     socket.on("score_updated", (data) => {
       if (data.status === "start") {
-        const updatedData = {
-          ...data,
-          scoringTeam: data.firstTeamScore > (tableData[tableData.length - 1]?.firstTeamScore || "0")
-            ? 'first'
-            : 'second',
-          timestamp: new Date().toISOString()
-        };
-        setTableData(prev => [...prev, updatedData]);
+        setTableData(prev => {
+          const lastEntry = prev[prev.length - 1];
+          const scoringTeam =
+            parseInt(data.firstTeamScore) > parseInt(lastEntry.firstTeamScore)
+              ? 'first'
+              : parseInt(data.secondTeamScore) > parseInt(lastEntry.secondTeamScore)
+                ? 'second'
+                : 'none';
+
+          const newEntry = {
+            ...data,
+            scoringTeam,
+            timestamp: new Date().toISOString()
+          };
+
+          return [...prev, newEntry];
+        });
       }
     });
 
     return () => {
       socket.off("score_updated");
     };
-  }, [gameId.id, tableData]);
+  }, []);
 
   const leftSideTeam =
     matchData.firstTeamName === matchData.receiver

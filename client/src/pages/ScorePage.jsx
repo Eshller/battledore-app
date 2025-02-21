@@ -16,22 +16,21 @@ function ScorePage() {
     const fetchMatchData = async () => {
       const data = await getMatchData(gameId.id);
       if (data?.match) {
-        // Only set scores if this match has existing scores
         if (data.match.scores && data.match.scores.length > 0 && !data.match.isPlayed) {
           const lastScore = data.match.scores[data.match.scores.length - 1];
           setTeamOneScore(lastScore.firstTeamScore);
           setTeamTwoScore(lastScore.secondTeamScore);
           setNumberOfShuttlecock(lastScore.numberOfShuttlecock || "1");
           setMatchStarted(true);
+
+          // Emit score update to ensure all clients are in sync
+          sendScore(lastScore.firstTeamScore, lastScore.secondTeamScore, "start");
         } else {
-          // Reset scores for new match
           setTeamOneScore("0");
           setTeamTwoScore("0");
           setNumberOfShuttlecock("1");
           setMatchStarted(false);
         }
-
-        // Reset misconducts for new match
         setMisconducts(data.match.misconducts || []);
       }
     };
