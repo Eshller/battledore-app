@@ -197,8 +197,14 @@ export const BackendProvider = ({ children }) => {
   const getMatchData = async (gameId) => {
     try {
       const response = await axiosInstance.get(`/match/${gameId}`);
-      setMatchData(response.data.match);
-      setNumberofMatches(response.data.match.length);
+      if (response.data.match) {
+        // Reset scores if it's a new match
+        if (!response.data.match.scores || response.data.match.scores.length === 0) {
+          response.data.match.scores = [];
+        }
+        setMatchData(response.data.match);
+        setNumberofMatches(response.data.match.length);
+      }
       return response.data;
     } catch (error) {
       console.log(error.message);

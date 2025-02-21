@@ -52,24 +52,28 @@ io.on("connection", (socket) => {
   });
 
   socket.on("add_misconduct", async (data) => {
-    const match = await Match.findOne({ _id: data.matchId });
-    if (match) {
-      match.misconducts.push({
-        player: data.player,
-        type: data.type,
-        timestamp: new Date()
-      });
-      await match.save();
+    try {
+      const match = await Match.findOne({ _id: data.matchId });
+      if (match) {
+        match.misconducts.push({
+          player: data.misconduct.player,
+          type: data.misconduct.type,
+          timestamp: data.misconduct.timestamp
+        });
+        await match.save();
 
-      // Emit the updated misconduct to all clients
-      socket.broadcast.emit("misconduct_updated", {
-        matchId: data.matchId,
-        misconduct: {
-          player: data.player,
-          type: data.type,
-          timestamp: new Date()
-        }
-      });
+        // Emit the updated misconduct to all clients
+        socket.broadcast.emit("misconduct_updated", {
+          matchId: data.matchId,
+          misconduct: {
+            player: data.misconduct.player,
+            type: data.misconduct.type,
+            timestamp: data.misconduct.timestamp
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error adding misconduct:", error);
     }
   });
 

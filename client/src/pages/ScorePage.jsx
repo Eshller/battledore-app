@@ -15,19 +15,23 @@ function ScorePage() {
     const fetchMatchData = async () => {
       const data = await getMatchData(gameId.id);
       if (data?.match) {
-        // Set initial scores from match data
-        if (data.match.scores && data.match.scores.length > 0) {
+        // Only set scores if this match has existing scores
+        if (data.match.scores && data.match.scores.length > 0 && !data.match.isPlayed) {
           const lastScore = data.match.scores[data.match.scores.length - 1];
           setTeamOneScore(lastScore.firstTeamScore);
           setTeamTwoScore(lastScore.secondTeamScore);
           setNumberOfShuttlecock(lastScore.numberOfShuttlecock || "1");
           setMatchStarted(true);
+        } else {
+          // Reset scores for new match
+          setTeamOneScore("0");
+          setTeamTwoScore("0");
+          setNumberOfShuttlecock("1");
+          setMatchStarted(false);
         }
 
-        // Set initial misconducts
-        if (data.match.misconducts) {
-          setMisconducts(data.match.misconducts);
-        }
+        // Reset misconducts for new match
+        setMisconducts(data.match.misconducts || []);
       }
     };
 
@@ -76,6 +80,25 @@ function ScorePage() {
       socket.off("misconduct_updated");
     };
   }, [gameId.id]);
+
+  useEffect(() => {
+    // Listen for new match creation
+    socket.on("match_created", () => {
+      // Reset all score-related state
+      setTeamOneScore("0");
+      setTeamTwoScore("0");
+      setNumberOfShuttlecock("1");
+      setMatchStarted(false);
+      setMisconducts([]);
+    });
+
+    // Clean up socket listeners when component unmounts
+    return () => {
+      socket.off("match_created");
+      socket.off("score_updated");
+      socket.off("misconduct_updated");
+    };
+  }, []);
 
   const handleMisconductSelect = (type, player) => {
     // Emit misconduct via socket

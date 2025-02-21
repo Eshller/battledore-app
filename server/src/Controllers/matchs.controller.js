@@ -164,32 +164,29 @@ const endMatch = async (req, res) => {
 
 const deleteMatch = async (req, res) => {
   try {
-    const { matchId, eventId } = req.params;
-    const existingMatch = await Match.findById({ _id: matchId });
-    if (!existingMatch) {
-      return res.status(404).json({ message: "Match details not found" });
-    }
-
-    const deletedMatch = await Match.findByIdAndDelete({ _id: matchId });
-    if (!deletedMatch) {
-      return res
-        .status(500)
-        .json({ message: "Something went wrong while deleting the match" });
-    }
-
-    const event = await Event.findById(eventId);
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-
-    event.matches.pull(matchId);
-    await event.save();
-
-    return res.status(200).json({
-      message: "Match deleted successfully",
+    const { eventId, matchId } = req.params;
+    
+    // Remove match from Event
+    await Event.findByIdAndUpdate(eventId, {
+      $pull: { matches: matchId }
     });
+
+    // Remove match and all its associated data
+    const deletedMatch = await Match.findByIdAndDelete(matchId);
+    
+    if (!deletedMatch) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    // Remove match reference from Umpire
+    await User.updateMany(
+      { matches: matchId },
+      { $pull: { matches: matchId } }
+    );
+
+    return res.status(200).json({ message: "Match deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Something went wrong" });
+    return res.status(500).json({ message: error.message });
   }
 };
 
