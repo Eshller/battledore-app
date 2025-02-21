@@ -4,6 +4,7 @@ import { useService } from "../ContextAPI/axios";
 import ScoreSheet from "../components/ScoreSheet.jsx";
 import io from "socket.io-client";
 import Watermark from "../components/Watermark";
+import { toast } from "react-toastify";
 
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
@@ -15,19 +16,22 @@ function ScorePage() {
     const fetchMatchData = async () => {
       const data = await getMatchData(gameId.id);
       if (data?.match) {
-        // Set initial scores from match data
-        if (data.match.scores && data.match.scores.length > 0) {
+        if (data.match.scores && data.match.scores.length > 0 && !data.match.isPlayed) {
           const lastScore = data.match.scores[data.match.scores.length - 1];
           setTeamOneScore(lastScore.firstTeamScore);
           setTeamTwoScore(lastScore.secondTeamScore);
           setNumberOfShuttlecock(lastScore.numberOfShuttlecock || "1");
           setMatchStarted(true);
-        }
 
-        // Set initial misconducts
-        if (data.match.misconducts) {
-          setMisconducts(data.match.misconducts);
+          // Emit score update to ensure all clients are in sync
+          sendScore(lastScore.firstTeamScore, lastScore.secondTeamScore, "start");
+        } else {
+          setTeamOneScore("0");
+          setTeamTwoScore("0");
+          setNumberOfShuttlecock("1");
+          setMatchStarted(false);
         }
+        setMisconducts(data.match.misconducts || []);
       }
     };
 
@@ -77,16 +81,44 @@ function ScorePage() {
     };
   }, [gameId.id]);
 
-  const handleMisconductSelect = (type, player) => {
-    // Emit misconduct via socket
-    socket.emit("add_misconduct", {
-      matchId: gameId.id,
-      player: player,
-      type: type,
-      timestamp: new Date()
+  useEffect(() => {
+    // Listen for new match creation
+    socket.on("match_created", () => {
+      // Reset all score-related state
+      setTeamOneScore("0");
+      setTeamTwoScore("0");
+      setNumberOfShuttlecock("1");
+      setMatchStarted(false);
+      setMisconducts([]);
     });
 
-    // Update local state
+    // Clean up socket listeners when component unmounts
+    return () => {
+      socket.off("match_created");
+      socket.off("score_updated");
+      socket.off("misconduct_updated");
+    };
+  }, []);
+
+  const handleMisconductSelect = (type, player) => {
+    if (!player) {
+      toast.error("Please select a player first");
+      return;
+    }
+
+    const misconductData = {
+      matchId: gameId.id,
+      misconduct: {
+        player: player,
+        type: type,
+        timestamp: new Date()
+      }
+    };
+
+    // Emit misconduct via socket
+    socket.emit("add_misconduct", misconductData);
+
+    // Update local state only once
     const newMisconduct = {
       player: player,
       type: type,
@@ -273,6 +305,10 @@ function ScorePage() {
       numberOfShuttlecock: "1",
       status: "reset"
     });
+  };
+
+  const handleMisconductUpdate = (newMisconduct) => {
+    setMisconducts(prev => [...prev, newMisconduct]);
   };
 
   return (
@@ -677,6 +713,7 @@ function ScorePage() {
             selectedPlayer={selectedPlayer}
             misconduct={misconduct}
             misconducts={misconducts}
+            onMisconductUpdate={handleMisconductUpdate}
           />
         </div>
         <footer className="text-center">

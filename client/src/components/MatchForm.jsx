@@ -2,6 +2,10 @@ import React, { useState } from "react";
 import { toast } from "react-toastify";
 import { useService } from "../ContextAPI/axios";
 import dayjs from "dayjs";
+import io from "socket.io-client";
+
+// const socket = io.connect("http://localhost:3001");
+const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 function MatchForm({ event }) {
   const { addMatch } = useService();
@@ -69,6 +73,8 @@ function MatchForm({ event }) {
     };
     const data = await addMatch(event?._id, newDetails);
     if (data.status == 201) {
+      socket.emit("new_match_created", data.match._id);
+
       setMatchDetail({
         typeOfMatch: "",
         firstTeamName: "",
@@ -156,9 +162,9 @@ function MatchForm({ event }) {
             </div>
             <div
               className={` ${matchDetail.typeOfMatch === "Women's doubles" ||
-                  matchDetail.typeOfMatch === "Men's doubles"
-                  ? `block`
-                  : `hidden`
+                matchDetail.typeOfMatch === "Men's doubles"
+                ? `block`
+                : `hidden`
                 }`}
             >
               <div className="block sm:flex justify-between">
@@ -203,9 +209,9 @@ function MatchForm({ event }) {
             </div>
             <div
               className={` ${matchDetail.typeOfMatch === "Women's doubles" ||
-                  matchDetail.typeOfMatch === "Men's doubles"
-                  ? `block`
-                  : `hidden`
+                matchDetail.typeOfMatch === "Men's doubles"
+                ? `block`
+                : `hidden`
                 }`}
             >
               <div className="block sm:flex justify-between">
