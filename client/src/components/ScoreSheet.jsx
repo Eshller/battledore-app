@@ -325,6 +325,15 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
                           {row.misconductType}
                         </div>
                       )}
+                    {/* {row.isMisconduct &&
+                    row.misconductPlayer === (
+                      leftSideTeam === matchData.firstTeamName
+                        ? matchData.playerOne
+                        : matchData.playerTwo
+                    ) &&
+                    (row.misconductType === 'F' || row.misconductType === 'I') && (
+                      <div className="text-sm font-bold">R</div>
+                    )} */}
                   </div>
                 </td>
               ))}
@@ -340,7 +349,15 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
                   key={index}
                   className="border border-[#5ea0b8] text-center px-2"
                 >
-
+                  {row.isMisconduct &&
+                    row.misconductPlayer === (
+                      leftSideTeam === matchData.firstTeamName
+                        ? matchData.playerOne
+                        : matchData.playerTwo
+                    ) &&
+                    (row.misconductType === 'F' || row.misconductType === 'I') && (
+                      <div className="text-sm font-bold">R</div>
+                    )}
                 </td>
               ))}
             </tr>

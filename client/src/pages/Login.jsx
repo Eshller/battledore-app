@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useService } from "../ContextAPI/axios.jsx";
+import LoadingSpinner from "../assets/LoadingSpinner.jsx";
 
 function Login() {
   const Navigate = useNavigate();
-  const { login, token } = useService();
+  const { login, token, isLoading, setIsLoading } = useService();
 
   const [loginData, setLoginData] = useState({
     email: "",
@@ -19,13 +20,22 @@ function Login() {
       [e.target.name]: e.target.value,
     });
   };
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    login(loginData);
-    setLoginData({
-      email: "",
-      password: "",
-    });
+  const handleSubmit = async (e) => {
+    setIsLoading(true);
+
+    try {
+      e.preventDefault();
+      await login(loginData);
+      setLoginData({
+        email: "",
+        password: "",
+      });
+    } catch (error) {
+      console.log(error.message);
+      // toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -135,8 +145,12 @@ function Login() {
               <button
                 onClick={handleSubmit}
                 className="py-2 w-full bg-white font-medium font-inter rounded-3xl text-xl scale-95 hover:scale-100"
+                disabled={isLoading}
               >
-                Log In
+                {isLoading ? <div className="flex items-center justify-center">
+                  <span className="mr-2">Loading...</span>
+                  <LoadingSpinner />
+                </div> : "Log In"}
               </button>
             </div>
           </div>

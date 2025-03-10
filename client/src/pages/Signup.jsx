@@ -4,7 +4,7 @@ import { useService } from "../ContextAPI/axios.jsx";
 
 function Signup() {
   const Navigate = useNavigate();
-  const { signup } = useService();
+  const { signup, isLoading, setIsLoading } = useService();
   const [signupData, setSignupData] = useState({
     jobrole: "",
     username: "",
@@ -29,21 +29,29 @@ function Signup() {
   };
 
   const handleSubmit = async (e) => {
+    setIsLoading(true);
     e.preventDefault();
     if (token) {
       localStorage.removeItem("token");
     }
-    const response = await signup(signupData);
-    setSignupData({
-      jobrole: "",
-      username: "",
-      email: "",
-      password: "",
-    });
-    if (response.status === 201) {
-      Navigate("/login");
-    } else {
-      Navigate("/signup");
+    try {
+      const response = await signup(signupData);
+      setSignupData({
+        jobrole: "",
+        username: "",
+        email: "",
+        password: "",
+      });
+      if (response.status === 201) {
+        Navigate("/login");
+      } else {
+        Navigate("/signup");
+      }
+    } catch (error) {
+      console.log(error.message);
+      // toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -202,7 +210,10 @@ function Signup() {
                 onClick={handleSubmit}
                 className="py-2 w-full bg-white font-medium font-inter rounded-3xl text-xl scale-95 hover:scale-100"
               >
-                Sign Up
+                {isLoading ? <div className="flex items-center justify-center">
+                  <span className="mr-2">Loading...</span>
+                  <LoadingSpinner />
+                </div> : "Sign Up"}
               </button>
             </div>
           </div>

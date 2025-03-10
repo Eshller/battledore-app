@@ -15,6 +15,7 @@ export const BackendProvider = ({ children }) => {
   const [myData, setMyData] = useState({});
   const [matchData, setMatchData] = useState([]);
   const [numberofMatches, setNumberofMatches] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   const server = String(import.meta.env.VITE_BATTLEDORE_SERVER_URL);
 
@@ -27,16 +28,21 @@ export const BackendProvider = ({ children }) => {
   // User functions
   const signup = async (userData) => {
     try {
+      setIsLoading(true);
       const response = await axios.post(`${server}/signup`, userData);
       toast.success(response.data?.message);
       return response;
     } catch (error) {
       toast.error(error.response?.data?.message);
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const login = async (user) => {
+    setIsLoading(true);
+    console.log("axios isLoading: ", isLoading)
     try {
       const response = await axios.post(`${server}/login`, user);
       setToken(response.data.token);
@@ -45,28 +51,36 @@ export const BackendProvider = ({ children }) => {
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const forgotPassword = async (to) => {
     try {
+      setIsLoading(true);
       const response = await axios.post(`${server}/forgotpassword`, to);
       toast.success(response.data?.message);
       return response.data?.otp;
     } catch (err) {
       console.log(err.message);
       toast.error(err.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const createNewPassword = async (detail) => {
     try {
+      setIsLoading(true);
       const response = await axios.post(`${server}/createNewPassword`, detail);
       toast.success(response.data?.message);
       return response;
     } catch (err) {
       console.log(err.message);
       toast.error(err.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,80 +91,102 @@ export const BackendProvider = ({ children }) => {
 
   const getAllUsers = async () => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.get("/players");
       setPlayerList(response.data.users);
       setNumberofUsers(response.data?.users?.length);
     } catch (error) {
       console.log(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const removeUser = async (userId) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.delete(`/users/delete/${userId}`);
       setNumberofUsers(numberOfEvents - 1);
       toast.success(response.data?.message);
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getYourData = async () => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.get("/getmydata");
       setMyData(response.data?.userData);
     } catch (error) {
       console.log("Unable to fetch your data", error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const updateMyData = async (myData) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.put("/updatemydata", myData);
       setMyData(response.data.data);
       toast.success(response.data?.message);
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const setEvent = async (event) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.post("/events/post", event);
       setNumberofEvents(numberOfEvents + 1);
       toast.success(response.data?.message);
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getEvents = async () => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.get("/events");
       setEventList(response.data?.events);
       setNumberofEvents(response.data?.events?.length);
       return response.data?.events;
     } catch (error) {
       console.log("Unable to fetch all events", error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const removeEvent = async (eventId) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.delete(`/events/delete/${eventId}`);
       setNumberofEvents(numberOfEvents - 1);
       toast.success(response.data?.message);
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const updateEvent = async (eventId, data) => {
     try {
+      setIsLoading(true);
       const updatedData = { ...data };
       delete updatedData._id;
       delete updatedData.__v;
@@ -164,11 +200,14 @@ export const BackendProvider = ({ children }) => {
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const addMatch = async (id, reqDetail) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.post(
         `/createMatch/${id}`,
         reqDetail
@@ -179,11 +218,14 @@ export const BackendProvider = ({ children }) => {
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const startMatch = async (id, reqDetail) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.patch(
         `/startMatch/${id}`,
         reqDetail
@@ -191,11 +233,15 @@ export const BackendProvider = ({ children }) => {
       return response;
     } catch (error) {
       console.log(error.message);
+      toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getMatchData = async (gameId) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.get(`/match/${gameId}`);
       if (response.data.match) {
         // Reset scores if it's a new match
@@ -208,32 +254,43 @@ export const BackendProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.log(error.message);
+      toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getScoresData = async () => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.get("/matches");
       setNumberofMatches(response.data?.matches?.length);
       return response.data?.matches;
     } catch (error) {
       console.log("Unable to fetch all matches", error.message);
+      toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const updateScores = async (winner, gameId) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.patch(`/endmatch/${gameId}`, winner);
       toast.success(response.data?.message);
       return response;
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const removeMatch = async (eventId, matchId) => {
     try {
+      setIsLoading(true);
       const response = await axiosInstance.delete(
         `/removematch/${eventId}/${matchId}`
       );
@@ -242,11 +299,14 @@ export const BackendProvider = ({ children }) => {
     } catch (error) {
       console.log(error.message);
       toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const saveMisconduct = async (misconductData) => {
     try {
+      setIsLoading(true);
       const response = await axios.post(
         `${import.meta.env.VITE_SERVER}/api/misconducts`,
         misconductData
@@ -254,19 +314,24 @@ export const BackendProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.error("Error saving misconduct:", error);
-      throw error;
+      toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getMisconducts = async (matchId) => {
     try {
+      setIsLoading(true);
       const response = await axios.get(
         `${import.meta.env.VITE_SERVER}/api/misconducts/${matchId}`
       );
       return response.data;
     } catch (error) {
       console.error("Error fetching misconducts:", error);
-      throw error;
+      toast.error(error.response?.data?.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -305,6 +370,8 @@ export const BackendProvider = ({ children }) => {
         removeMatch,
         saveMisconduct,
         getMisconducts,
+        isLoading,
+        setIsLoading,
       }}
     >
       {children}
