@@ -5,18 +5,18 @@ import io from "socket.io-client";
 
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
-const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdate }) => {
+const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconductUpdate }) => {
   console.log("misconducts", misconducts)
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
 
   const [tableData, setTableData] = useState([]);
-  // const [misconducts, setMisconducts] = useState([]);
-
   const prevMisconductsRef = useRef(misconducts);
 
   // Handle real-time score updates
   useEffect(() => {
+    if (!matchData) return;
+
     const handleScoreUpdate = (data) => {
       if (data.status === "start") {
         setTableData(prev => {
@@ -66,71 +66,73 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
   // Initialize table data with match data and initial misconducts
   useEffect(() => {
     const initializeTable = async () => {
-      if (matchData) {
-        const firstTeamName = matchData.firstTeamName;
-        const secondTeamName = matchData.secondTeamName;
-        const initialState = {
-          firstTeamScore: "0",
-          secondTeamScore: "0",
+      if (!matchData) return;
+
+      const firstTeamName = matchData.firstTeamName;
+      const secondTeamName = matchData.secondTeamName;
+      const initialState = {
+        firstTeamScore: "0",
+        secondTeamScore: "0",
+        firstTeamName,
+        secondTeamName,
+        scoringTeam: 'start',
+        status: 'initial',
+        timestamp: new Date().toISOString(),
+        isMisconduct: false
+      };
+
+      const scoreEntries = (matchData.scores || []).map((score, index) => {
+        const previousScore = index > 0 ? matchData.scores[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
+        const scoringTeam =
+          parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
+            ? 'first'
+            : parseInt(score.secondTeamScore) > parseInt(previousScore.secondTeamScore)
+              ? 'second'
+              : 'none';
+
+        return {
+          firstTeamScore: score.firstTeamScore,
+          secondTeamScore: score.secondTeamScore,
           firstTeamName,
           secondTeamName,
-          scoringTeam: 'start',
-          status: 'initial',
-          timestamp: new Date().toISOString(),
+          scoringTeam,
+          status: 'start',
+          timestamp: score.createdAt || new Date().toISOString(),
+          numberOfShuttlecock: score.numberOfShuttlecock,
           isMisconduct: false
         };
+      });
 
-        const scoreEntries = (matchData.scores || []).map((score, index) => {
-          const previousScore = index > 0 ? matchData.scores[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
-          const scoringTeam =
-            parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
-              ? 'first'
-              : parseInt(score.secondTeamScore) > parseInt(previousScore.secondTeamScore)
-                ? 'second'
-                : 'none';
+      const misconductEntries = misconducts.map(m => {
+        const matchingScore = [...scoreEntries].reverse().find(score =>
+          new Date(score.timestamp) <= new Date(m.timestamp)
+        ) || { firstTeamScore: "0", secondTeamScore: "0" };
 
-          return {
-            firstTeamScore: score.firstTeamScore,
-            secondTeamScore: score.secondTeamScore,
-            firstTeamName,
-            secondTeamName,
-            scoringTeam,
-            status: 'start',
-            timestamp: score.createdAt || new Date().toISOString(),
-            numberOfShuttlecock: score.numberOfShuttlecock,
-            isMisconduct: false
-          };
-        });
+        return {
+          ...matchingScore,
+          scoringTeam: 'none',
+          status: 'misconduct',
+          timestamp: m.timestamp,
+          isMisconduct: true,
+          misconductType: m.type,
+          misconductPlayer: m.player
+        };
+      });
 
-        const misconductEntries = misconducts.map(m => {
-          const matchingScore = [...scoreEntries].reverse().find(score =>
-            new Date(score.timestamp) <= new Date(m.timestamp)
-          ) || { firstTeamScore: "0", secondTeamScore: "0" };
+      const allEntries = [...scoreEntries, ...misconductEntries]
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-          return {
-            ...matchingScore,
-            scoringTeam: 'none',
-            status: 'misconduct',
-            timestamp: m.timestamp,
-            isMisconduct: true,
-            misconductType: m.type,
-            misconductPlayer: m.player
-          };
-        });
-
-        const allEntries = [...scoreEntries, ...misconductEntries]
-          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-        setTableData([initialState, ...allEntries]);
-      }
+      setTableData([initialState, ...allEntries]);
     };
 
     initializeTable();
-  }, [matchData]); // Only depend on matchData
+  }, [matchData, misconducts]);
 
   // Handle new misconducts added via props
   useEffect(() => {
-    const prevMisconducts = prevMisconductsRef.current;
+    if (!misconducts || !tableData.length) return;
+
+    const prevMisconducts = prevMisconductsRef.current || [];
     if (misconducts.length > prevMisconducts.length) {
       const newMisconducts = misconducts.slice(prevMisconducts.length);
       newMisconducts.forEach(m => {
@@ -158,7 +160,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
 
 
   const renderMisconducts = React.useCallback((playerName) => {
-    if (!misconducts || !playerName) return null;
+    if (!misconducts || !Array.isArray(misconducts) || !playerName) return null;
 
     const uniqueMisconducts = misconducts.reduce((acc, curr) => {
       const key = `${curr.player}-${curr.type}-${curr.timestamp}`;
@@ -201,10 +203,16 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts, onMisconductUpdat
         </div>
       ));
   }, [misconducts]);
-  const leftSideTeam =
+
+  const leftSideTeam = matchData ? (
     matchData.firstTeamName === matchData.receiver
       ? matchData.secondTeamName
-      : matchData.firstTeamName;
+      : matchData.firstTeamName
+  ) : '';
+
+  if (!matchData) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div>
