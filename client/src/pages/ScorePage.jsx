@@ -11,7 +11,8 @@ import MatchTimer from "../components/MatchTimer";
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 function ScorePage() {
-	const { getMatchData, matchData, updateScores, myData } = useService();
+	const { getMatchData, matchData, updateScores, myData, updateMatchTime } =
+		useService();
 	const gameId = useParams();
 	const Navigate = useNavigate();
 	useEffect(() => {
@@ -273,27 +274,60 @@ function ScorePage() {
 		}
 
 		setEndMatchConfirmation(!endMatchConfirmation);
-
-		if (winner != "DRAW") {
+		let winnerStr = "";
+		if (winner !== "DRAW") {
+			winnerStr = `${winner} wins`;
 			setWinnerMessage(`Match won by ${winner} / ${loser}`);
 		} else {
 			setWinnerMessage(
 				`Match is draw between ${leftSideTeam} and ${rightSideTeam}`
 			);
-			return winner;
+			winnerStr = winner;
 		}
-		return `${winner} wins`;
+		return winnerStr;
 	};
 
 	const end = async () => {
-		const temp = {
-			winner: endMatchSession(),
-		};
-		stopMatchTimer(); // Stop the timer
-		const res = await updateScores(temp, gameId.id);
-		if (res.status == 200) {
-			Navigate("/pastmatches");
-			sendScore(teamOneScore, teamTwoScore, "end", winner);
+		try {
+			// Stop the timer first
+			stopMatchTimer();
+
+			// Get current time values
+			const minutes = Math.floor(matchTime / 60);
+			const seconds = matchTime % 60;
+
+			// Create update data
+			const updateData = {
+				winner: endMatchSession(),
+				isPlayed: true,
+				matchTime: {
+					minutes: parseInt(minutes),
+					seconds: parseInt(seconds),
+				},
+			};
+
+			// First, ensure the match time is saved
+			await updateMatchTime(gameId.id, minutes, seconds);
+			
+			// Then end the match
+			const res = await updateScores(updateData, gameId.id);
+
+			// Handle both success scenarios
+			if (
+				res?.status === 200 ||
+				(res?.data && res?.data?.message === "Match Ends")
+			) {
+				sendScore(teamOneScore, teamTwoScore, "end", updateData.winner);
+				// Force navigation after a short delay to ensure state updates
+				setTimeout(() => Navigate("/pastmatches"), 500);
+				return;
+			}
+
+			throw new Error("Failed to end match");
+		} catch (error) {
+			if (error.message !== "Match Ends") {
+				toast.error("Failed to end match");
+			}
 		}
 	};
 
@@ -376,13 +410,68 @@ function ScorePage() {
 		}
 	};
 
-	const stopMatchTimer = () => {
+	const stopMatchTimer = async () => {
 		if (timerIntervalRef.current) {
 			clearInterval(timerIntervalRef.current);
 			timerIntervalRef.current = null;
 			setIsMatchTimerRunning(false);
+
+			try {
+				// Calculate minutes and seconds
+				const minutes = Math.floor(matchTime / 60);
+				const seconds = matchTime % 60;
+
+				// Save final time to backend when timer stops
+				const result = await updateMatchTime(gameId.id, minutes, seconds);
+				// Don't throw error if update fails, just log it
+				if (!result) {
+					console.warn("Could not update final match time");
+				}
+			} catch (error) {
+				// Ignore "Match Ends" message
+				if (error.message !== "Match Ends") {
+					console.error("Error stopping timer:", error);
+				}
+			}
 		}
 	};
+
+	// Add an interval to periodically save time to backend
+	useEffect(() => {
+		let saveTimeInterval;
+
+		if (isMatchTimerRunning) {
+			// Save time every minute
+			saveTimeInterval = setInterval(() => {
+				const minutes = Math.floor(matchTime / 60);
+				const seconds = matchTime % 60;
+				updateMatchTime(gameId.id, minutes, seconds)
+					.then(result => {
+						if (result) {
+							console.log("Match time saved successfully:", { minutes, seconds });
+						}
+					})
+					.catch(err => {
+						console.error("Failed to save match time:", err);
+					});
+			}, 60000); // 60 seconds
+		}
+
+		return () => {
+			if (saveTimeInterval) {
+				clearInterval(saveTimeInterval);
+			}
+		};
+	}, [isMatchTimerRunning, matchTime]);
+
+	// Initialize matchTime from backend data when component loads
+	useEffect(() => {
+		if (matchData?.matchTime) {
+			const totalSeconds =
+				matchData.matchTime.minutes * 60 + matchData.matchTime.seconds;
+			setMatchTime(totalSeconds);
+		}
+	}, [matchData]);
 
 	const formatTime = (seconds) => {
 		const hours = Math.floor(seconds / 3600);
@@ -432,7 +521,7 @@ function ScorePage() {
 								className="w-20 h-20 bg-green-500 hover:bg-green-600 rounded-full"
 								onClick={handlePlayClick}
 							>
-								<path d="m380-300 280-180-280-180v360ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+								<path d="m380-300 280-180-280-180v360ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-320Z" />
 							</svg>
 						</button>
 						<button

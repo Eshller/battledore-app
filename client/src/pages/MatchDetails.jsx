@@ -15,18 +15,41 @@ function MatchDetails() {
 
 	const [liveScore, setLiveScore] = useState("");
 	const [error, setError] = useState(null);
+	const [matchTime, setMatchTime] = useState({ minutes: 0, seconds: 0 });
+	const [isLoading, setIsLoading] = useState(true);
 
 	useEffect(() => {
 		const fetchData = async () => {
 			try {
-				await getMatchData(gameId.id);
+				setIsLoading(true);
+				const response = await getMatchData(gameId.id);
+				if (response?.match) {
+					const time = {
+						minutes: parseInt(response.match.matchTime?.minutes) || 0,
+						seconds: parseInt(response.match.matchTime?.seconds) || 0,
+					};
+					setMatchTime(time);
+				}
 			} catch (err) {
-				setError(err);
 				console.error("Error fetching match data:", err);
+				setError(err.message);
+			} finally {
+				setIsLoading(false);
 			}
 		};
 		fetchData();
 	}, [gameId.id]);
+
+	// Update local matchTime when matchData changes
+	useEffect(() => {
+		if (matchData?.matchTime) {
+			const time = {
+				minutes: parseInt(matchData.matchTime.minutes) || 0,
+				seconds: parseInt(matchData.matchTime.seconds) || 0,
+			};
+			setMatchTime(time);
+		}
+	}, [matchData]);
 
 	useEffect(() => {
 		socket.on("score_updated", (data) => {
@@ -43,6 +66,16 @@ function MatchDetails() {
 		return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 	}
 
+	const formatTime = (time) => {
+		if (!time || typeof time !== "object") {
+			return "00:00";
+		}
+
+		const minutes = String(parseInt(time.minutes) || 0).padStart(2, "0");
+		const seconds = String(parseInt(time.seconds) || 0).padStart(2, "0");
+		return `${minutes}:${seconds}`;
+	};
+
 	if (error) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
@@ -55,143 +88,155 @@ function MatchDetails() {
 	}
 
 	return (
-		<>
-			<div className="min-h-[90vh] w-[90%] 2xl:w-full pt-10 font-inter">
-				<h1 className="text-2xl md:text-4xl lg:text-5xl text-white font-medium px-4 md:px-10">
-					Live Score
-				</h1>
-				<div id="main" className="mt-4 sm:mt-6 md:mt-10 w-full">
-					{/* match details */}
-					<div id="infoBox" className="w-full rounded-3xl overflow-hidden">
-						<div
-							id="img"
-							className="h-[180px] sm:h-[240px] md:h-[260px] lg:h-[320px] overflow-hidden flex justify-between items-center"
-						>
-							<img src="../badminton.jpg" className="h-auto w-full" alt="" />
+		<div className="min-h-[90vh] w-full max-w-6xl mx-auto px-3 md:px-4 pt-6 font-inter">
+			<h1 className="text-xl md:text-3xl text-white font-bold mb-4">
+				Match Details
+			</h1>
+
+			<div className="bg-white rounded-xl shadow-lg overflow-hidden">
+				{/* Header Image */}
+				<div className="relative h-[160px] sm:h-[200px] overflow-hidden">
+					<img
+						src="../badminton.jpg"
+						className="w-full h-full object-cover"
+						alt="Match Banner"
+					/>
+					<div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+				</div>
+
+				{/* Match Info */}
+				<div className="bg-gradient-to-br from-[#90cae3] to-[#7CB6CB] p-4 md:p-6">
+					<div className="max-w-3xl mx-auto space-y-4">
+						{/* Title and Date */}
+						<div className="text-center space-y-2">
+							<h2 className="text-xl md:text-2xl font-bold text-white">
+								{matchData?.eventDetails?.eventTitle}
+							</h2>
+							<p className="text-base md:text-lg text-white/90">
+								{matchData?.eventDetails?.eventStart} to{" "}
+								{matchData?.eventDetails?.eventEnd}
+							</p>
+							<p className="text-sm md:text-base text-white/80">
+								Match Date: {matchData?.matchDate}
+							</p>
 						</div>
-						<div className="bg-[#7cb6cb] h-full text-white p-2 md:p-5 flex flex-col gap-5 items-center">
-							<div className="flex flex-col gap-0 md:gap-2 items-center">
-								<h1 className="text-[#B1D848] text-center text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold">
-									Title :{" "}
-									<span>{`${matchData?.eventDetails?.eventTitle}`}</span>
-								</h1>
-								<p className="text-base xs:text-lg sm:text-xl md:text-2xl font-normal">
-									<span className="font-bold">
-										{matchData?.eventDetails?.eventStart}
-									</span>{" "}
-									to{" "}
-									<span className="font-bold">
-										{matchData?.eventDetails?.eventEnd}
-									</span>{" "}
-								</p>
-								<p className="text-base sm:text-xl md:text-2xl font-normal">
-									Match Date : {matchData?.matchDate}
+
+						{/* Score Display */}
+						{(matchData.isPlayed || matchData?.scores?.length > 0) && (
+							<div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center space-y-3">
+								{/* Match Duration - Enhanced styling */}
+								<div className="flex flex-col items-center justify-center gap-2 text-white/90 mb-4">
+									<span className="text-sm font-medium uppercase tracking-wider">Match Duration</span>
+									<div className="flex items-center justify-center gap-2">
+										<div className="flex flex-col items-center">
+											<div className="text-2xl font-bold font-mono bg-white/20 px-3 py-1 rounded-lg">
+												{String(parseInt(matchTime.minutes) || 0).padStart(2, "0")}
+											</div>
+											<span className="text-xs text-white/80 mt-1">MIN</span>
+										</div>
+										<div className="text-xl font-bold text-white/70 mb-2">:</div>
+										<div className="flex flex-col items-center">
+											<div className="text-2xl font-bold font-mono bg-white/20 px-3 py-1 rounded-lg">
+												{String(parseInt(matchTime.seconds) || 0).padStart(2, "0")}
+											</div>
+											<span className="text-xs text-white/80 mt-1">SEC</span>
+										</div>
+									</div>
+								</div>
+								
+								{/* Winner/Live Status */}
+								{matchData.isPlayed ? (
+									<p className="inline-block px-6 py-2 bg-green-500 text-white rounded-full text-lg font-bold">
+										{toSentenceCase(matchData.winner)}
+									</p>
+								) : (
+									matchData?.scores?.length > 0 && (
+										<div className="space-y-3">
+											{(liveScore.status === "start" || liveScore === "") && (
+												<div className="flex items-center justify-center gap-2">
+													<span className="relative flex h-3 w-3">
+														<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+														<span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+													</span>
+													<p className="text-red-500 font-bold">LIVE NOW</p>
+												</div>
+											)}
+											{liveScore.status === "end" && (
+												<p className="text-green-500 font-bold text-xl">
+													{liveScore.won}
+												</p>
+											)}
+										</div>
+									)
+								)}
+
+								{/* Score */}
+								<div className="flex justify-center items-center gap-4 text-3xl md:text-4xl font-bold text-white">
+									<div className="text-center">
+										<span>
+											{matchData.isPlayed || !liveScore
+												? matchData?.scores?.slice(-1)[0]?.firstTeamScore
+												: liveScore.firstTeamScore}
+										</span>
+										<p className="text-sm mt-1 font-normal opacity-80">
+											{matchData?.firstTeamName}
+										</p>
+									</div>
+									<span className="opacity-50">vs</span>
+									<div className="text-center">
+										<span>
+											{matchData.isPlayed || !liveScore
+												? matchData?.scores?.slice(-1)[0]?.secondTeamScore
+												: liveScore.secondTeamScore}
+										</span>
+										<p className="text-sm mt-1 font-normal opacity-80">
+											{matchData?.secondTeamName}
+										</p>
+									</div>
+								</div>
+							</div>
+						)}
+
+						{/* Match Details Grid */}
+						<div className="grid sm:grid-cols-2 gap-3 text-white/90">
+							{matchData.eventPlace && (
+								<div className="bg-white/10 rounded-lg p-3">
+									<p className="text-sm opacity-70">Court Number</p>
+									<p className="text-lg font-semibold">
+										{matchData.eventPlace}
+									</p>
+								</div>
+							)}
+							<div className="bg-white/10 rounded-lg p-3">
+								<p className="text-sm opacity-70">Match Type</p>
+								<p className="text-lg font-semibold">{matchData.typeOfMatch}</p>
+							</div>
+							<div className="bg-white/10 rounded-lg p-3">
+								<p className="text-sm opacity-70">First Team Players</p>
+								<p className="text-lg font-semibold">
+									{matchData.playerOne}
+									{matchData.playerThree && ` & ${matchData.playerThree}`}
 								</p>
 							</div>
-							<div className="leading-5 md:leading-8 w-full text-wrap font-normal text-center text-sm sm:text-base md:text-xl">
-								{matchData.eventPlace ? (
-									<p>
-										Court no. :{" "}
-										<span className="font-bold">{matchData?.eventPlace}</span>
-									</p>
-								) : null}
-								<p>
-									Type of match :{" "}
-									<span className="font-bold">{matchData?.typeOfMatch}</span>
-								</p>
-								<p>
-									First team name :{" "}
-									<span className="font-bold">{matchData?.firstTeamName}</span>
-								</p>
-								<p>
-									Second team name :{" "}
-									<span className="font-bold">{matchData?.secondTeamName}</span>
-								</p>
-								<p>
-									First team player's name :{" "}
-									<span className="font-bold">{matchData?.playerOne}</span>
-									{matchData?.playerThree ? (
-										<span className="font-bold">
-											{" "}
-											& {matchData?.playerThree}
-										</span>
-									) : null}
-								</p>
-								<p>
-									Second team player's name :{" "}
-									<span className="font-bold">{matchData?.playerTwo}</span>
-									{matchData?.playerFour ? (
-										<span className="font-bold">
-											{" "}
-											& {matchData?.playerFour}
-										</span>
-									) : null}
+							<div className="bg-white/10 rounded-lg p-3">
+								<p className="text-sm opacity-70">Second Team Players</p>
+								<p className="text-lg font-semibold">
+									{matchData.playerTwo}
+									{matchData.playerFour && ` & ${matchData.playerFour}`}
 								</p>
 							</div>
 						</div>
 					</div>
-					{matchData.isPlayed || matchData?.scores?.length > 0 ? (
-						<div>
-							{/* Match scores */}
-							<div className="p-1 md:p-3 w-full">
-								<div>
-									{matchData.isPlayed ? (
-										<p className="px-5 py-1 text-center text-xl sm:text-3xl text-green-600 font-bold">
-											{toSentenceCase(matchData.winner)}
-										</p>
-									) : (
-										<div>
-											{matchData?.scores?.length > 0 ? (
-												<div>
-													<div>
-														{liveScore.status === "start" ||
-														liveScore === "" ? (
-															<p className="px-5 py-1 text-lg md:text-2xl text-red-600 font-bold text-center">
-																Match is Live Now
-															</p>
-														) : null}
-													</div>
-													<div>
-														{liveScore.status === "end" && (
-															<p className="px-5 py-1 text-center text-xl sm:text-3xl text-green-600 font-bold">
-																{liveScore.won}
-															</p>
-														)}
-													</div>
-												</div>
-											) : null}
-										</div>
-									)}
-								</div>
-								<div className="flex justify-center items-center gap-1 text-white text-3xl w-full">
-									<p>
-										{matchData.isPlayed || liveScore == ""
-											? matchData?.scores?.length > 0
-												? matchData.scores.slice(-1)[0].firstTeamScore
-												: null
-											: liveScore.firstTeamScore}
-									</p>
-									<p>-</p>
-									<p>
-										{matchData.isPlayed || liveScore == ""
-											? matchData?.scores?.length > 0
-												? matchData.scores.slice(-1)[0].secondTeamScore
-												: null
-											: liveScore.secondTeamScore}
-									</p>
-								</div>
-							</div>
-
-							{matchData.isPlayed || matchData?.scores?.length > 0 ? (
-								<div className="w-[90%] 2xl:w-fit 2xl:m-auto pb-10">
-									<ScoreSheet misconducts={matchData.misconducts || []} />
-								</div>
-							) : null}
-						</div>
-					) : null}
 				</div>
 			</div>
-		</>
+
+			{/* Score Sheet */}
+			{(matchData.isPlayed || matchData?.scores?.length > 0) && (
+				<div className="mt-6 mb-8">
+					<ScoreSheet misconducts={matchData.misconducts || []} />
+				</div>
+			)}
+		</div>
 	);
 }
 
