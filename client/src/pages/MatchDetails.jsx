@@ -304,9 +304,15 @@ function MatchDetails() {
 			</div>
 
 			{/* Score Sheet */}
-			{(matchData.isPlayed || matchData?.scores?.length > 0) && (
+			{matchData && (matchData.isPlayed || matchData?.scores?.length > 0) && (
 				<div className="mt-6 mb-8">
-					<ScoreSheet misconducts={matchData.misconducts || []} />
+					<h2 className="text-xl md:text-2xl text-white font-bold mb-4">
+						Score Sheet
+					</h2>
+					<ScoreSheet 
+						misconducts={matchData.misconducts || []} 
+						scores={matchData.scores || []}
+					/>
 				</div>
 			)}
 		</div>

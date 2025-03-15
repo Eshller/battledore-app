@@ -5,21 +5,58 @@ import io from "socket.io-client";
 
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
-const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconductUpdate }) => {
+const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconductUpdate, scores = [] }) => {
   console.log("misconducts", misconducts)
+  console.log("scores prop", scores)
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
+  const [isScorePage, setIsScorePage] = useState(false);
 
   const [tableData, setTableData] = useState([]);
   const prevMisconductsRef = useRef(misconducts);
+
+  // Determine if we're on the score page or match details page
+  useEffect(() => {
+    // Check if the current URL contains 'scorepage'
+    const currentPath = window.location.pathname;
+    setIsScorePage(currentPath.includes('scorepage'));
+  }, []);
 
   // Handle real-time score updates
   useEffect(() => {
     if (!matchData) return;
 
     const handleScoreUpdate = (data) => {
-      if (data.status === "start") {
+      console.log("Score update received:", data);
+      console.log("Current gameId:", gameId.id);
+      
+      if (data.status === "start" && data.gameId === gameId.id) {
+        console.log("Updating table data with new score");
         setTableData(prev => {
+          // If tableData is empty, initialize it with a default entry
+          if (!prev || prev.length === 0) {
+            const initialState = {
+              firstTeamScore: "0",
+              secondTeamScore: "0",
+              firstTeamName: matchData.firstTeamName,
+              secondTeamName: matchData.secondTeamName,
+              scoringTeam: 'start',
+              status: 'initial',
+              timestamp: new Date().toISOString(),
+              isMisconduct: false
+            };
+            return [initialState, {
+              ...data,
+              scoringTeam: data.scoringTeam || 'first',
+              timestamp: data.timestamp || new Date().toISOString(),
+              isMisconduct: false,
+              firstTeamName: matchData.firstTeamName,
+              secondTeamName: matchData.secondTeamName,
+              scoringPlayer: data.scoringPlayer,
+              individualScore: data.individualScore || false
+            }];
+          }
+          
           const lastEntry = prev[prev.length - 1];
           const scoringTeam =
             parseInt(data.firstTeamScore) > parseInt(lastEntry.firstTeamScore)
@@ -30,8 +67,8 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
 
           const newEntry = {
             ...data,
-            scoringTeam,
-            timestamp: new Date().toISOString(),
+            scoringTeam: data.scoringTeam || scoringTeam,
+            timestamp: data.timestamp || new Date().toISOString(),
             isMisconduct: false,
             firstTeamName: matchData.firstTeamName,
             secondTeamName: matchData.secondTeamName,
@@ -61,9 +98,15 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
       }
     };
 
+    // Listen for both score and update_score events
     socket.on("score_updated", handleScoreUpdate);
-    return () => socket.off("score_updated");
-  }, [matchData]);
+    socket.on("score", handleScoreUpdate);
+    
+    return () => {
+      socket.off("score_updated");
+      socket.off("score");
+    };
+  }, [matchData, gameId.id]);
 
   // Initialize table data with match data and initial misconducts
   useEffect(() => {
@@ -83,8 +126,12 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
         isMisconduct: false
       };
 
-      const scoreEntries = (matchData.scores || []).map((score, index) => {
-        const previousScore = index > 0 ? matchData.scores[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
+      // Use scores prop if provided and not on score page, otherwise use matchData.scores
+      // This ensures that on the score page, we always use matchData.scores for real-time updates
+      const scoreData = (!isScorePage && scores.length > 0) ? scores : (matchData.scores || []);
+      
+      const scoreEntries = scoreData.map((score, index) => {
+        const previousScore = index > 0 ? scoreData[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
         const scoringTeam =
           parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
             ? 'first'
@@ -101,7 +148,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           status: 'start',
           timestamp: score.createdAt || new Date().toISOString(),
           numberOfShuttlecock: score.numberOfShuttlecock,
-          isMisconduct: false
+          isMisconduct: false,
+          scoringPlayer: score.scoringPlayer,
+          individualScore: score.individualScore || false
         };
       });
 
@@ -128,7 +177,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
     };
 
     initializeTable();
-  }, [matchData, misconducts]);
+  }, [matchData, misconducts, scores, isScorePage]);
 
   // Handle new misconducts added via props
   useEffect(() => {
@@ -212,8 +261,22 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
       : matchData.firstTeamName
   ) : '';
 
-  if (!matchData) {
-    return <div>Loading...</div>;
+  // Check if we have valid matchData
+  if (!matchData || !matchData.firstTeamName) {
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-4 text-center">
+        <p className="text-gray-500">Loading score sheet data...</p>
+      </div>
+    );
+  }
+
+  // Check if we have any scores to display
+  if (tableData.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-4 text-center">
+        <p className="text-gray-500">No score data available for this match.</p>
+      </div>
+    );
   }
 
   return (
@@ -239,6 +302,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                       {index === 0 ? 'S' :
                         index === 1 ? '0' :
                           (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)) ?
+                            (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
+                          // If no individual scoring data, show team score for the first player
+                          (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
                             (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
                     </div>
                     {/* Remove scoring player indicator */}
@@ -295,6 +361,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                       {/* Show score */}
                       <div>
                         {(row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerThree : matchData.playerFour)) ?
+                          (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
+                        // If no individual scoring data, show team score for the second player of the first team
+                        (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
                           (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
                       </div>
                       {/* Remove scoring player indicator */}
@@ -337,6 +406,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                           : matchData.playerOne) ? 'S' :
                         index === 1 ? '0' :
                           (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)) ?
+                            (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : 
+                          // If no individual scoring data, show team score for the first player of the second team
+                          (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first')) ?
                             (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
                     </div>
                     {/* Remove scoring player indicator */}
@@ -403,6 +475,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                       {/* Show score */}
                       <div>
                         {(row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerFour : matchData.playerThree)) ?
+                          (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : 
+                        // If no individual scoring data, show team score for the second player of the second team
+                        (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first')) ?
                           (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
                       </div>
                       {/* Remove scoring player indicator */}

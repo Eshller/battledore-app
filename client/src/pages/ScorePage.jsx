@@ -20,6 +20,10 @@ function ScorePage() {
 	const [servingTeam, setServingTeam] = useState(1); // 1 for first team, 2 for second team
 	const [serviceCourt, setServiceCourt] = useState("right"); // "right" or "left"
 	const [serverPlayer, setServerPlayer] = useState(""); // Name of the current server
+	const [receiverPlayer, setReceiverPlayer] = useState(""); // Name of the current receiver
+	
+	// Add state variable for serve indicator
+	const [showServeIndicator, setShowServeIndicator] = useState(true);
 	
 	// Add a ref to track if this is the initial score change
 	const isInitialScoreChange = useRef(true);
@@ -204,7 +208,7 @@ function ScorePage() {
 	};
 
 	const sendScore = (f_score, s_score, isActive, winner, startTime, endTime, shuttlecockCount, scoringPlayer = null) => {
-		socket.emit("score", {
+		const scoreData = {
 			gameId: gameId.id,
 			firstTeamScore: f_score,
 			secondTeamScore: s_score,
@@ -216,8 +220,19 @@ function ScorePage() {
 			servingTeam: servingTeam,
 			serviceCourt: serviceCourt,
 			serverPlayer: serverPlayer,
-			scoringPlayer: scoringPlayer
-		});
+			receiverPlayer: receiverPlayer,
+			scoringPlayer: scoringPlayer,
+			timestamp: new Date().toISOString(),
+			firstTeamName: matchData?.firstTeamName,
+			secondTeamName: matchData?.secondTeamName,
+			individualScore: scoringPlayer ? true : false
+		};
+		
+		console.log("Sending score update:", scoreData);
+		
+		// Emit to both score and update_score events to ensure all components receive the update
+		socket.emit("score", scoreData);
+		socket.emit("update_score", scoreData);
 	};
 
 	const undoChanges = () => {
@@ -498,6 +513,9 @@ function ScorePage() {
 	};
 
 	const Team1 = (scoringPlayer) => {
+		// Hide serve indicator when a point is scored
+		setShowServeIndicator(false);
+		
 		const newTeamOneScore = (parseInt(teamOneScore) + 1).toString();
 		setTeamOneScore(newTeamOneScore);
 		// Update service tracking when team 1 scores
@@ -520,6 +538,7 @@ function ScorePage() {
 			servingTeam,
 			serviceCourt,
 			serverPlayer,
+			receiverPlayer,
 			startTime: matchStartTime ? matchStartTime.toISOString() : null,
 			endTime: matchEndTime ? matchEndTime.toISOString() : null,
 			scoringPlayer: scoringPlayer,
@@ -539,6 +558,9 @@ function ScorePage() {
 	};
 
 	const Team2 = (scoringPlayer) => {
+		// Hide serve indicator when a point is scored
+		setShowServeIndicator(false);
+		
 		const newTeamTwoScore = (parseInt(teamTwoScore) + 1).toString();
 		setTeamTwoScore(newTeamTwoScore);
 		// Update service tracking when team 2 scores
@@ -561,6 +583,7 @@ function ScorePage() {
 			servingTeam,
 			serviceCourt,
 			serverPlayer,
+			receiverPlayer,
 			startTime: matchStartTime ? matchStartTime.toISOString() : null,
 			endTime: matchEndTime ? matchEndTime.toISOString() : null,
 			scoringPlayer: scoringPlayer,
@@ -611,7 +634,7 @@ function ScorePage() {
 		}
 		
 		// Legacy handling for buttons without specific player
-		const isReceiverFirstTeam = matchData?.firstTeamName === matchData?.receiver;
+		const isReceiverFirstTeam = matchData?.firstTeamName === matchData.receiver;
 		if (side === "right") {
 			const player = isReceiverFirstTeam ? matchData?.playerTwo : matchData?.playerOne;
 			isReceiverFirstTeam ? Team2(player) : Team1(player);
@@ -622,69 +645,60 @@ function ScorePage() {
 	};
 
 	const endMatchSession = () => {
-		const leftSideTeam =
-			matchData.firstTeamName === matchData.receiver
-					? matchData.secondTeamName
-					: matchData.firstTeamName;
-
-		const rightSideTeam =
-			matchData.firstTeamName === matchData.receiver
-					? matchData.firstTeamName
-					: matchData.secondTeamName;
-
-		const leftSideScore =
-			matchData.firstTeamName === matchData.receiver
-					? teamOneScore
-					: teamTwoScore;
-
-		const rightSideScore =
-			matchData.firstTeamName === matchData.receiver
-					? teamTwoScore
-					: teamOneScore;
+		// Get the actual team scores directly
+		const teamOneScoreInt = parseInt(teamOneScore);
+		const teamTwoScoreInt = parseInt(teamTwoScore);
+		
+		console.log("End Match Session - Teams and Scores:", {
+			teamOneScore: teamOneScoreInt,
+			teamTwoScore: teamTwoScoreInt,
+			firstTeamName: matchData?.firstTeamName,
+			secondTeamName: matchData?.secondTeamName
+		});
 
 		let winner = "";
 		let loser = "";
 
-		if (leftSideScore > rightSideScore) {
-			winner = `${leftSideTeam}`;
-			loser = `${
-				winner == matchData.firstTeamName
-						? matchData.secondTeamName
-						: matchData.firstTeamName
-			}`;
-		} else if (leftSideScore < rightSideScore) {
-			winner = `${rightSideTeam}`;
-			loser = `${
-				winner == matchData.firstTeamName
-						? matchData.secondTeamName
-						: matchData.firstTeamName
-			}`;
+		// Determine the winner based on the actual scores
+		if (teamOneScoreInt > teamTwoScoreInt) {
+			winner = matchData?.firstTeamName;
+			loser = matchData?.secondTeamName;
+		} else if (teamOneScoreInt < teamTwoScoreInt) {
+			winner = matchData?.secondTeamName;
+			loser = matchData?.firstTeamName;
 		} else {
 			winner = "DRAW";
 		}
 
+		console.log("End Match Session - Winner:", winner);
+
 		// Only show confirmation dialog if not coming from win animation
 		if (!showWinAnimation) {
-			setEndMatchConfirmation(!endMatchConfirmation);
+			// Set the winner message before showing the confirmation dialog
+			if (winner !== "DRAW") {
+				setWinnerMessage(`${winner} wins!`);
+			} else {
+				setWinnerMessage(
+					`Match is draw between ${matchData?.firstTeamName} and ${matchData?.secondTeamName}`
+				);
+			}
+			// Show the confirmation dialog
+			setEndMatchConfirmation(true);
+		} else {
+			// If coming from win animation, call end directly
+			end();
 		}
 		
-		let winnerStr = "";
-		if (winner !== "DRAW") {
-			winnerStr = `${winner} wins`;
-			setWinnerMessage(`Match won by ${winner} / ${loser}`);
-		} else {
-			setWinnerMessage(
-				`Match is draw between ${leftSideTeam} and ${rightSideTeam}`
-			);
-			winnerStr = winner;
-		}
-		return winnerStr;
+		return winner;
 	};
 
 	const end = async () => {
 		try {
 			// If win animation is showing, hide it
 			setShowWinAnimation(false);
+			
+			// Close the confirmation dialog
+			setEndMatchConfirmation(false);
 			
 			// Record the match end time
 			const endTime = new Date();
@@ -693,13 +707,28 @@ function ScorePage() {
 			// Stop the timer first
 			stopMatchTimer();
 
+			// Calculate the winner using the same logic as endMatchSession
+			const teamOneScoreInt = parseInt(teamOneScore);
+			const teamTwoScoreInt = parseInt(teamTwoScore);
+
+			let winner = "";
+
+			// Determine the winner based on the actual scores
+			if (teamOneScoreInt > teamTwoScoreInt) {
+				winner = matchData?.firstTeamName;
+			} else if (teamOneScoreInt < teamTwoScoreInt) {
+				winner = matchData?.secondTeamName;
+			} else {
+				winner = "DRAW";
+			}
+
 			// Get current time values
 			const minutes = Math.floor(matchTime / 60);
 			const seconds = matchTime % 60;
 
 			// Create update data
 			const updateData = {
-				winner: endMatchSession(),
+				winner: winner,
 				isPlayed: true,
 				matchTime: {
 					minutes: parseInt(minutes),
@@ -721,6 +750,8 @@ function ScorePage() {
 				(res?.data && res?.data?.message === "Match Ends")
 			) {
 				sendScore(teamOneScore, teamTwoScore, "end", updateData.winner, matchStartTime, endTime, numberOfShuttlecock);
+				// Show success message
+				toast.success(`${winner !== "DRAW" ? winner + " wins!" : "Match ended in a draw"}`);
 				// Force navigation after a short delay to ensure state updates
 				setTimeout(() => Navigate("/pastmatches"), 500);
 				return;
@@ -729,7 +760,8 @@ function ScorePage() {
 			throw new Error("Failed to end match");
 		} catch (error) {
 			if (error.message !== "Match Ends") {
-				toast.error("Failed to end match");
+				toast.error("Failed to end match: " + error.message);
+				console.error("Error ending match:", error);
 			}
 		}
 	};
@@ -740,8 +772,11 @@ function ScorePage() {
 		};
 		const res = await updateScores(temp, gameId.id);
 		if (res.status == 200) {
+			toast.success("Match ended by walkover");
 			Navigate("/pastmatches");
-			sendScore(teamOneScore, teamTwoScore, "end", winner, matchStartTime, matchEndTime, numberOfShuttlecock);
+			sendScore(teamOneScore, teamTwoScore, "end", "Walkover", matchStartTime, matchEndTime, numberOfShuttlecock);
+		} else {
+			toast.error("Failed to end match by walkover");
 		}
 	};
 
@@ -910,6 +945,9 @@ function ScorePage() {
 		setMatchStarted(true);
 		setPlay(true);
 		
+		// Show serve indicator at the start of the match
+		setShowServeIndicator(true);
+		
 		// Record the match start time
 		const startTime = new Date();
 		setMatchStartTime(startTime);
@@ -935,6 +973,19 @@ function ScorePage() {
 			setServingTeam(initialServingTeam);
 			setServiceCourt("right"); // Even score (0) serves from right court
 			setServerPlayer(matchData.server);
+			
+			// Set the receiver based on the server
+			if (!matchData?.playerThree && !matchData?.playerFour) {
+				// Singles - receiver is the player from the other team
+				setReceiverPlayer(initialServingTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
+			} else {
+				// Doubles - receiver is determined by service court
+				if (initialServingTeam === 1) {
+					setReceiverPlayer(matchData?.playerTwo); // Right court receiver from team 2
+				} else {
+					setReceiverPlayer(matchData?.playerOne); // Right court receiver from team 1
+				}
+			}
 		} else {
 			// Fallback to default behavior if no server information is available
 			setServingTeam(1);
@@ -944,9 +995,11 @@ function ScorePage() {
 			if (!matchData?.playerThree && !matchData?.playerFour) {
 				// Singles - server is the first player of team 1
 				setServerPlayer(matchData?.playerOne || "");
+				setReceiverPlayer(matchData?.playerTwo || "");
 			} else {
 				// Doubles - for even score (0), first player serves
 				setServerPlayer(matchData?.playerOne || "");
+				setReceiverPlayer(matchData?.playerTwo || "");
 			}
 		}
 		
@@ -1000,9 +1053,20 @@ function ScorePage() {
 				if (scoringTeam === 1) {
 					// For team 1, even score = first player, odd score = second player
 					setServerPlayer(newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree);
+					// Update receiver based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerTwo : matchData?.playerFour);
 				} else {
 					// For team 2, even score = first player, odd score = second player
 					setServerPlayer(newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour);
+					// Update receiver based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerOne : matchData?.playerThree);
+				}
+			} else {
+				// Singles - receiver is always the same player for each team
+				if (scoringTeam === 1) {
+					setReceiverPlayer(matchData?.playerTwo);
+				} else {
+					setReceiverPlayer(matchData?.playerOne);
 				}
 			}
 		} else {
@@ -1023,14 +1087,20 @@ function ScorePage() {
 			if (!matchData?.playerThree && !matchData?.playerFour) {
 				// Singles - server is always the same player for each team
 				setServerPlayer(scoringTeam === 1 ? matchData?.playerOne : matchData?.playerTwo);
+				// Update receiver
+				setReceiverPlayer(scoringTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
 			} else {
 				// Doubles - server alternates based on score
 				if (scoringTeam === 1) {
 					// For team 1, even score = first player, odd score = second player
 					setServerPlayer(newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree);
+					// Update receiver based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerTwo : matchData?.playerFour);
 				} else {
 					// For team 2, even score = first player, odd score = second player
 					setServerPlayer(newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour);
+					// Update receiver based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerOne : matchData?.playerThree);
 				}
 			}
 		}
@@ -1093,55 +1163,54 @@ function ScorePage() {
 	}, [teamOneScore, teamTwoScore, servingTeam, matchStarted]);
 
 	const resumeAfterInterval = () => {
-		// Hide the interval UI
-		setShowInterval(false);
-		setIntervalTeam(null);
+		// Show serve indicator after interval
+		setShowServeIndicator(true);
 		
-		// After an interval, service stays with the same player/team
-		// But we need to ensure the service court is correct based on the score
-		const servingTeamScore = servingTeam === 1 ? 
-			parseInt(teamOneScore) : parseInt(teamTwoScore);
-		
-		// Determine service court based on the serving team's score
-		// Even score = right court, odd score = left court
-		const correctServiceCourt = servingTeamScore % 2 === 0 ? "right" : "left";
-		setServiceCourt(correctServiceCourt);
-		
-		// Update the server player if needed (for doubles matches)
-		if (matchData?.playerThree && matchData?.playerFour) {
-			let correctServer = "";
-			if (servingTeam === 1) {
-				correctServer = servingTeamScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree;
-			} else {
-				correctServer = servingTeamScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour;
-			}
-			
-			if (serverPlayer !== correctServer) {
-				setServerPlayer(correctServer);
-			}
-		}
-		
-		// Set the post-interval state to true
-		setIsPostInterval(true);
-		
-		// Emit interval end event to sync with other clients
-		socket.emit("interval_end", {
-			matchId: gameId.id
-		});
-		
-		// Clear interval timer
+		// Clear the interval timer
 		if (intervalTimerRef.current) {
 			clearInterval(intervalTimerRef.current);
 			intervalTimerRef.current = null;
 		}
+		
+		// Hide the interval screen
+		setShowInterval(false);
+		
+		// Reset interval time for next use
+		setIntervalTimeLeft(120);
+		
+		// Set post-interval state
+		setIsPostInterval(true);
 		
 		// Resume the match timer
 		if (!isMatchTimerRunning) {
 			startMatchTimer();
 		}
 		
-		// Notify via toast
-		toast.success("Match resumed after interval");
+		// Announce the current score
+		const team1Score = parseInt(teamOneScore);
+		const team2Score = parseInt(teamTwoScore);
+		
+		// Determine which team is leading
+		let leadingTeam = null;
+		if (team1Score > team2Score) {
+			leadingTeam = matchData?.firstTeamName;
+		} else if (team2Score > team1Score) {
+			leadingTeam = matchData?.secondTeamName;
+		}
+		
+		// Construct the announcement message
+		let announcement = "";
+		if (leadingTeam) {
+			announcement = `${teamOneScore}-${teamTwoScore}, ${leadingTeam} leads`;
+		} else {
+			announcement = `${teamOneScore}-all`;
+		}
+		
+		// Show toast with the announcement
+		toast.info(announcement, {
+			position: "top-center",
+			autoClose: 3000,
+		});
 	};
 
 	// Format interval time as MM:SS
@@ -1268,6 +1337,36 @@ function ScorePage() {
 			socket.off("interval_end");
 		};
 	}, [gameId.id, isMatchTimerRunning]);
+
+	// Add an effect to update the winner message whenever the scores change
+	useEffect(() => {
+		// Only update if the confirmation dialog is open
+		if (endMatchConfirmation) {
+			// Get the actual team scores directly
+			const teamOneScoreInt = parseInt(teamOneScore);
+			const teamTwoScoreInt = parseInt(teamTwoScore);
+
+			let winner = "";
+
+			// Determine the winner based on the actual scores
+			if (teamOneScoreInt > teamTwoScoreInt) {
+				winner = matchData?.firstTeamName;
+			} else if (teamOneScoreInt < teamTwoScoreInt) {
+				winner = matchData?.secondTeamName;
+			} else {
+				winner = "DRAW";
+			}
+
+			// Update the winner message
+			if (winner !== "DRAW") {
+				setWinnerMessage(`${winner} wins!`);
+			} else {
+				setWinnerMessage(
+					`Match is draw between ${matchData?.firstTeamName} and ${matchData?.secondTeamName}`
+				);
+			}
+		}
+	}, [teamOneScore, teamTwoScore, endMatchConfirmation, matchData]);
 
 	return (
 		<div className="relative">
@@ -1454,21 +1553,24 @@ function ScorePage() {
 			)}
 
 			{endMatchConfirmation && (
-				<div className="bg-white text-3xl font-inter absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-lg">
-					<h1 className="text-lg lg:text-xl">{winnerMessage}</h1>
-					<div className="mt-5 flex gap-10">
-						<button
-							className="border border-green-500 bg-green-500 hover:border-green-600 hover:bg-green-600 text-2xl font-inter px-4 py-2 rounded-md flex-1 font-semibold"
-							onClick={() => end()}
-						>
-							Yes
-						</button>
-						<button
-							className="border border-red-500 bg-red-500 hover:border-red-600 hover:bg-red-600 text-2xl font-inter px-4 py-2 rounded-md flex-1  font-semibold"
-							onClick={() => setEndMatchConfirmation(false)}
-						>
-							No
-						</button>
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+					<div className="bg-white text-center p-6 rounded-lg shadow-lg max-w-md w-full">
+						<h1 className="text-xl font-bold mb-4">{winnerMessage}</h1>
+						<p className="mb-6">Are you sure you want to end this match?</p>
+						<div className="flex gap-4 justify-center">
+							<button
+								className="bg-green-500 hover:bg-green-600 text-white font-bold px-6 py-2 rounded-md transition-colors"
+								onClick={() => end()}
+							>
+								Yes
+							</button>
+							<button
+								className="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-2 rounded-md transition-colors"
+								onClick={() => setEndMatchConfirmation(false)}
+							>
+								No
+							</button>
+						</div>
 					</div>
 				</div>
 			)}
@@ -1526,7 +1628,7 @@ function ScorePage() {
 								<div className="inline-block text-5xl animate-bounce">🏆</div>
 							</div>
 							<h2 className="text-3xl font-bold text-blue-600 mb-2">
-								{winningTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName} WINS!
+								{winningTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName} wins!
 							</h2>
 							<div className="text-2xl font-semibold bg-gray-100 rounded-full py-2 px-4 inline-block mb-2">
 								{winningTeam === 1 ? teamOneScore : teamTwoScore} - {winningTeam === 1 ? teamTwoScore : teamOneScore}
@@ -1621,7 +1723,11 @@ function ScorePage() {
 								<button
 									className="text-xl xl:text-3xl min-w-48 text-white font-bold rounded-lg xl:rounded-2xl px-5 py-3 bg-red-400 m-4 flex justify-center items-center shadow-lg uppercase"
 									onClick={() => {
+										// First stop the match timer
 										stopMatchTimer();
+										// Reset any previous winner message
+										setWinnerMessage("");
+										// Then show the end match confirmation
 										endMatchSession();
 									}}
 								>
@@ -1668,6 +1774,22 @@ function ScorePage() {
 								: `${teamOneScore}`}
 						</span>
 					</div>
+					
+					{/* Serve Indicator */}
+					{showServeIndicator && matchStarted && (
+						<div className="flex justify-center mb-2">
+							<div className="bg-gray-100 px-4 py-2 rounded-lg shadow-sm">
+								<div className="text-lg font-semibold text-gray-800 flex items-center justify-center">
+									<span className="text-red-500 font-bold">Server-</span>
+									<span className="mr-2">{serverPlayer}</span>
+									<span className="mx-2">and</span>
+									<span className="text-blue-500 font-bold">Receiver-</span>
+									<span>{receiverPlayer}</span>
+								</div>
+							</div>
+						</div>
+					)}
+					
 					{/* Court */}
 					<div className="">
 						<div className="h-[10rem] sm:h-[14rem] md:h-[20rem] lg:h-[23rem] xl:h-[25rem] 2xl:h-[30rem] bg-green-600 flex shadow-lg relative">
@@ -1870,6 +1992,7 @@ function ScorePage() {
 						misconduct={misconduct}
 						misconducts={misconducts}
 						onMisconductUpdate={handleMisconductUpdate}
+						scores={matchData?.scores || []}
 					/>
 				</div>
 				<footer className="text-center">
