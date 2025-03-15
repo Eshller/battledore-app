@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import { useService } from "../ContextAPI/axios";
 import dayjs from "dayjs";
@@ -8,11 +8,14 @@ import io from "socket.io-client";
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 function MatchForm({ event }) {
-	const { addMatch } = useService();
+	const { addMatch, getAllUsers, playerList } = useService();
 
 	const [matchTypeOption, setMatchTypeOption] = useState(false);
 	const [matchBox, setMatchBox] = useState(true);
 	const [playerState, setPlayerState] = useState(false);
+	const [umpireOptions, setUmpireOptions] = useState([]);
+	const [showUmpireDropdown, setShowUmpireDropdown] = useState(false);
+	const umpireDropdownRef = React.useRef(null);
 
 	const [matchDetail, setMatchDetail] = useState({
 		eventDetails: event?._id,
@@ -25,11 +28,47 @@ function MatchForm({ event }) {
 		playerFour: "",
 		umpireId: "",
 		matchDate: "",
+		totalPoints: 21,
 	});
+
+	// Fetch all users when component mounts
+	useEffect(() => {
+		getAllUsers();
+	}, []);
+
+	// Filter umpires from playerList
+	useEffect(() => {
+		if (playerList && playerList.length > 0) {
+			const umpires = playerList.filter(user => user.jobrole === "umpire");
+			setUmpireOptions(umpires);
+		}
+	}, [playerList]);
+
+	// Close dropdown when clicking outside
+	useEffect(() => {
+		function handleClickOutside(event) {
+			if (umpireDropdownRef.current && !umpireDropdownRef.current.contains(event.target)) {
+				setShowUmpireDropdown(false);
+			}
+		}
+
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside);
+		};
+	}, []);
+
+	function selectUmpire(username) {
+		setMatchDetail({
+			...matchDetail,
+			umpireId: username,
+		});
+		setShowUmpireDropdown(false);
+	}
 
 	function matchType(opt) {
 		matchDetail.typeOfMatch = `${opt}`;
-		if (opt == "Men's doubles" || opt == "Women's doubles") {
+		if (opt == "Men's doubles" || opt == "Women's doubles" || opt == "Mixed Doubles") {
 			setPlayerState(true);
 		} else {
 			setPlayerState(false);
@@ -46,10 +85,16 @@ function MatchForm({ event }) {
 	}
 
 	const handleMatchData = (e) => {
+		const { name, value } = e.target;
 		setMatchDetail({
 			...matchDetail,
-			[e.target.name]: e.target.value,
+			[name]: name === 'totalPoints' ? parseInt(value) : value,
 		});
+
+		// If typing in umpire field, show dropdown and filter results
+		if (name === 'umpireId') {
+			setShowUmpireDropdown(true);
+		}
 	};
 
 	const verifyDate = () => {
@@ -94,6 +139,7 @@ function MatchForm({ event }) {
 					playerFour: "",
 					umpireId: "",
 					matchDate: "",
+					totalPoints: 21,
 				});
 				setMatchBox(!matchBox);
 			} else {
@@ -140,6 +186,7 @@ function MatchForm({ event }) {
 										"Men's doubles",
 										"Women's singles",
 										"Women's doubles",
+										"Mixed Doubles",
 									].map((opt) => (
 										<p
 											key={opt}
@@ -248,18 +295,70 @@ function MatchForm({ event }) {
 								/>
 							</div>
 						</div>
-						<div className="block sm:flex justify-between">
+						<div className="block sm:flex justify-between relative">
 							<label htmlFor="umpireId" className="mx-2 font-semibold">
-								Umpire Id :
+								Umpire Username :
 							</label>
-							<input
-								type="text"
-								name="umpireId"
-								value={matchDetail.umpireId}
-								placeholder="email id"
+							<div className="flex-1 relative" ref={umpireDropdownRef}>
+								<input
+									type="text"
+									name="umpireId"
+									value={matchDetail.umpireId}
+									placeholder="username"
+									onChange={handleMatchData}
+									onClick={() => setShowUmpireDropdown(true)}
+									className="border-b-[1px] font-medium border-slate-500 outline-none px-4 py-1 w-full"
+								/>
+								{showUmpireDropdown && (
+									<div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base overflow-auto">
+										{(() => {
+											if (umpireOptions.length === 0) {
+												return (
+													<div className="px-4 py-2 text-gray-500 italic">
+														Loading umpires...
+													</div>
+												);
+											}
+											
+											const filteredUmpires = umpireOptions.filter(umpire => 
+												umpire.username.toLowerCase().includes(matchDetail.umpireId.toLowerCase())
+											);
+											
+											if (filteredUmpires.length === 0) {
+												return (
+													<div className="px-4 py-2 text-gray-500 italic">
+														No umpires found
+													</div>
+												);
+											}
+											
+											return filteredUmpires.map((umpire) => (
+												<div
+													key={umpire._id}
+													onClick={() => selectUmpire(umpire.username)}
+													className="cursor-pointer hover:bg-gray-100 px-4 py-2 text-gray-900"
+												>
+													{umpire.username}
+												</div>
+											));
+										})()}
+									</div>
+								)}
+							</div>
+						</div>
+						<div className="block sm:flex justify-between">
+							<label htmlFor="totalPoints" className="mx-2 font-semibold">
+								Total Points for Match :
+							</label>
+							<select
+								name="totalPoints"
+								value={matchDetail.totalPoints}
 								onChange={handleMatchData}
-								className="border-b-[1px] font-medium  border-slate-500 outline-none px-4 py-1 flex-1"
-							/>
+								className="border-b-[1px] font-medium border-slate-500 outline-none px-4 py-1 flex-1"
+							>
+								<option value={21}>21</option>
+								<option value={15}>15</option>
+							</select>
 						</div>
 						<div>
 							<label htmlFor="typeofmatch" className="mx-2">

@@ -24,6 +24,7 @@ import {
   endMatch,
   onGoingMatch,
   createMatch,
+	updateMatchTime,
 } from "../Controllers/matchs.controller.js";
 
 const router = Router();
@@ -55,5 +56,6 @@ router.route("/endmatch/:matchId").patch(authMiddleware, endMatch);
 router
   .route("/removematch/:eventId/:matchId")
   .delete(authMiddleware, deleteMatch);
+router.patch("/match/:matchId/time", authMiddleware, updateMatchTime);
 
 export default router;

@@ -16,6 +16,9 @@ function MatchDetails() {
 	const [liveScore, setLiveScore] = useState("");
 	const [error, setError] = useState(null);
 	const [matchTime, setMatchTime] = useState({ minutes: 0, seconds: 0 });
+	const [startTime, setStartTime] = useState(null);
+	const [endTime, setEndTime] = useState(null);
+	const [shuttlecockCount, setShuttlecockCount] = useState("0");
 	const [isLoading, setIsLoading] = useState(true);
 
 	useEffect(() => {
@@ -29,6 +32,20 @@ function MatchDetails() {
 						seconds: parseInt(response.match.matchTime?.seconds) || 0,
 					};
 					setMatchTime(time);
+					
+					// Set start and end times if available
+					if (response.match.startTime) {
+						setStartTime(new Date(response.match.startTime));
+					}
+					if (response.match.endTime) {
+						setEndTime(new Date(response.match.endTime));
+					}
+					
+					// Set shuttlecock count if available
+					if (response.match.scores && response.match.scores.length > 0) {
+						const lastScore = response.match.scores[response.match.scores.length - 1];
+						setShuttlecockCount(lastScore.numberOfShuttlecock || "0");
+					}
 				}
 			} catch (err) {
 				console.error("Error fetching match data:", err);
@@ -48,6 +65,14 @@ function MatchDetails() {
 				seconds: parseInt(matchData.matchTime.seconds) || 0,
 			};
 			setMatchTime(time);
+		}
+		
+		// Update start and end times if available
+		if (matchData?.startTime) {
+			setStartTime(new Date(matchData.startTime));
+		}
+		if (matchData?.endTime) {
+			setEndTime(new Date(matchData.endTime));
 		}
 	}, [matchData]);
 
@@ -74,6 +99,21 @@ function MatchDetails() {
 		const minutes = String(parseInt(time.minutes) || 0).padStart(2, "0");
 		const seconds = String(parseInt(time.seconds) || 0).padStart(2, "0");
 		return `${minutes}:${seconds}`;
+	};
+	
+	// Format date and time for display
+	const formatDateTime = (date) => {
+		if (!date) return "Not available";
+		
+		return new Intl.DateTimeFormat('en-US', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+			hour12: true
+		}).format(date);
 	};
 
 	if (error) {
@@ -119,6 +159,35 @@ function MatchDetails() {
 							<p className="text-sm md:text-base text-white/80">
 								Match Date: {matchData?.matchDate}
 							</p>
+						</div>
+
+						{/* Match Start and End Times */}
+						{(startTime || endTime) && (
+							<div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center space-y-3">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div className="flex flex-col items-center justify-center">
+										<span className="text-sm font-medium uppercase tracking-wider text-white/90 mb-2">Match Started At</span>
+										<div className="bg-white/20 px-4 py-2 rounded-lg text-white font-medium">
+											{formatDateTime(startTime)}
+										</div>
+									</div>
+									
+									<div className="flex flex-col items-center justify-center">
+										<span className="text-sm font-medium uppercase tracking-wider text-white/90 mb-2">Match Ended At</span>
+										<div className="bg-white/20 px-4 py-2 rounded-lg text-white font-medium">
+											{formatDateTime(endTime)}
+										</div>
+									</div>
+								</div>
+							</div>
+						)}
+
+						{/* Shuttlecock Count */}
+						<div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
+							<span className="text-sm font-medium uppercase tracking-wider text-white/90 mb-2 block">Shuttlecocks Used</span>
+							<div className="bg-white/20 px-4 py-2 rounded-lg inline-block">
+								<span className="text-2xl font-bold text-white">{shuttlecockCount}</span>
+							</div>
 						</div>
 
 						{/* Score Display */}
@@ -210,6 +279,10 @@ function MatchDetails() {
 							<div className="bg-white/10 rounded-lg p-3">
 								<p className="text-sm opacity-70">Match Type</p>
 								<p className="text-lg font-semibold">{matchData.typeOfMatch}</p>
+							</div>
+							<div className="bg-white/10 rounded-lg p-3">
+								<p className="text-sm opacity-70">Total Points</p>
+								<p className="text-lg font-semibold">{matchData.totalPoints || 21}</p>
 							</div>
 							<div className="bg-white/10 rounded-lg p-3">
 								<p className="text-sm opacity-70">First Team Players</p>

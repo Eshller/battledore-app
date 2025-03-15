@@ -51,7 +51,7 @@ const CountdownTimer = ({ onComplete }) => {
 	return (
 		<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
 			<div className="bg-white p-8 rounded-lg shadow-lg text-center">
-				<h2 className="text-4xl font-bold mb-4">Knock-up Time</h2>
+				<h2 className="text-4xl font-bold mb-4">Knocking Period</h2>
 				<div className="text-6xl font-mono mb-6">{formatTime(knockupTime)}</div>
 				<div className="flex gap-4 justify-center">
 					{isKnockupActive ? (
