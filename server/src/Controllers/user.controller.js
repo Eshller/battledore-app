@@ -12,7 +12,12 @@ const registerUser = async (req, res) => {
 
     const existedUser = await User.findOne({ email });
     if (existedUser) {
-      return res.status(409).json({ message: "User already exists" });
+      return res.status(409).json({ message: "User already exists with this email" });
+    }
+
+    const existedUsername = await User.findOne({ username });
+    if (existedUsername) {
+      return res.status(409).json({ message: "Username already taken" });
     }
 
     let user;

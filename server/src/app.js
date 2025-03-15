@@ -11,11 +11,11 @@ import { Match } from "./Models/matchs.model.js";
 const app = express();
 
 app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN,
-    methods: "GET,POST,PUT,DELETE,PATCH,HEAD",
-    credentials: true,
-  })
+	cors({
+		origin: process.env.CORS_ORIGIN,
+		methods: "GET,POST,PUT,DELETE,PATCH,HEAD",
+		credentials: true,
+	})
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -26,91 +26,75 @@ app.use("/api/v1/battledore", userRouter);
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: process.env.CORS_ORIGIN,
-    methods: "GET,POST,PUT,DELETE,PATCH,HEAD",
-    credentials: true,
-  },
+	cors: {
+		origin: process.env.CORS_ORIGIN,
+		methods: "GET,POST,PUT,DELETE,PATCH,HEAD",
+		credentials: true,
+	},
 });
 
 // socket io
 
 io.on("connection", (socket) => {
-  socket.on("update_score", async (data) => {
-    const match = await Match.findOne({ _id: data.Id });
-    if (match && data.status == "start") {
-      match.scores.push({
-        firstTeamScore: data.firstTeamScore,
-        secondTeamScore: data.secondTeamScore,
-        numberOfShuttlecock: data.numberOfShuttlecock,
-      });
-      await match.save();
+	// Add new knockup timer events
+	socket.on("knockup_start", (data) => {
+		socket.broadcast.emit("knockup_started", data);
+	});
 
-      // Emit the updated scores to all clients
-      socket.broadcast.emit("score_updated", data);
-    }
-  });
+	socket.on("knockup_end", (data) => {
+		socket.broadcast.emit("knockup_ended", data);
+	});
 
-  socket.on("add_misconduct", async (data) => {
-    try {
-      if (!data.misconduct?.player?.trim() || !data.misconduct?.type) {
-        console.error("Invalid misconduct data:", data);
-        return;
-      }
+	socket.on("update_score", async (data) => {
+		const match = await Match.findOne({ _id: data.Id });
+		if (match && data.status == "start") {
+			match.scores.push({
+				firstTeamScore: data.firstTeamScore,
+				secondTeamScore: data.secondTeamScore,
+				numberOfShuttlecock: data.numberOfShuttlecock,
+			});
+			await match.save();
 
-      const match = await Match.findOne({ _id: data.matchId });
-      if (match) {
-        const newMisconduct = {
-          player: data.misconduct.player.trim(),
-          type: data.misconduct.type,
-          timestamp: data.misconduct.timestamp || new Date()
-        };
-        
-        // Check for duplicate before adding
-        const isDuplicate = match.misconducts.some(m => 
-          m.player === newMisconduct.player && 
-          m.type === newMisconduct.type && 
-          new Date(m.timestamp).getTime() === new Date(newMisconduct.timestamp).getTime()
-        );
+			// Emit the updated scores to all clients
+			socket.broadcast.emit("score_updated", data);
+		}
+	});
 
-        if (!isDuplicate) {
-          match.misconducts.push(newMisconduct);
-          await match.save();
+	socket.on("add_misconduct", async (data) => {
+		try {
+			const { matchId, misconduct } = data;
+			const match = await Match.findOne({ _id: matchId });
+			if (match) {
+				match.misconducts.push(misconduct);
+				await match.save();
+				socket.broadcast.emit("misconduct_updated", {
+					matchId,
+					misconduct,
+				});
+			}
+		} catch (error) {
+			console.error("Error adding misconduct:", error);
+		}
+	});
 
-          socket.broadcast.emit("misconduct_updated", {
-            matchId: data.matchId,
-            misconduct: newMisconduct
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Error adding misconduct:", error);
-    }
-  });
+	socket.on("reset_match", async (data) => {
+		const match = await Match.findOne({ _id: data.Id });
+		if (match) {
+			match.scores = [];
+			match.misconducts = [];
+			await match.save();
+			socket.broadcast.emit("match_reset", { matchId: data.Id });
+		}
+	});
 
-  socket.on("reset_match", async (data) => {
-    const match = await Match.findOne({ _id: data.Id });
-    if (match) {
-      // Clear scores and misconducts
-      match.scores = [];
-      match.misconducts = [];
-      await match.save();
-
-      // Broadcast reset to all clients
-      socket.broadcast.emit("match_reset", {
-        matchId: data.Id
-      });
-    }
-  });
-
-  socket.on("disconnect", () => {});
+	socket.on("disconnect", () => {});
 });
 
 export const getIO = () => {
-  if (!io) {
-    throw new Error("Socket.io not initialized!");
-  }
-  return io;
+	if (!io) {
+		throw new Error("Socket.io not initialized!");
+	}
+	return io;
 };
 
 export { server };

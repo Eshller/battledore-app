@@ -5,8 +5,8 @@ import { User } from "../Models/user.model.js";
 const startMatch = async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { eventPlace, server, receiver } = req.body;
-    if ([eventPlace, server, receiver].some((field) => field?.trim() === "")) {
+    const { eventPlace, server, receiver, rightTeam } = req.body;
+    if ([eventPlace, server, receiver, rightTeam].some((field) => field?.trim() === "")) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -21,6 +21,7 @@ const startMatch = async (req, res) => {
         eventPlace,
         server,
         receiver,
+        rightTeam,
       },
       {
         new: true,
@@ -56,6 +57,7 @@ const createMatch = async (req, res) => {
       playerFour,
       umpireId,
       matchDate,
+      totalPoints,
     } = req.body;
     if (
       [
@@ -73,7 +75,7 @@ const createMatch = async (req, res) => {
     }
 
     const umpire = await User.findOne({
-      email: umpireId,
+      username: umpireId,
       jobrole: "umpire",
     });
     if (!umpire) {
@@ -94,6 +96,7 @@ const createMatch = async (req, res) => {
       playerThree,
       playerFour,
       matchDate,
+      totalPoints: totalPoints || 21,
       referee: umpire.username,
     });
 
@@ -139,27 +142,61 @@ const getMatches = async (req, res) => {
 
 const endMatch = async (req, res) => {
   try {
-    const { winner } = req.body;
-    const { matchId } = req.params;
+  const { winner, matchTime, isPlayed, startTime, endTime } = req.body;
+  const { matchId } = req.params;
 
-    const updatedMatch = await Match.findByIdAndUpdate(
-      { _id: matchId },
-      {
-        winner,
-        isPlayed: true,
-      },
-      {
-        new: true,
-      }
-    );
-    if (!updatedMatch) {
-      return res.status(404).json({ message: "Match details not found" });
-    }
+		const match = await Match.findById(matchId);
+		if (!match) {
+			return res
+				.status(404)
+				.json({ success: false, message: "Match not found" });
+		}
 
-    return res.status(200).json({ message: "Match Ends" });
-  } catch (error) {
-    res.status(500).json({ message: "Something went wrong" });
-  }
+		// Create update object
+		const updateData = {};
+
+		// Always update matchTime if provided
+		if (matchTime) {
+			updateData.matchTime = {
+				minutes: parseInt(matchTime.minutes) || 0,
+				seconds: parseInt(matchTime.seconds) || 0,
+			};
+		}
+
+		// Update start time if provided
+		if (startTime) {
+			updateData.startTime = new Date(startTime);
+		}
+
+		// Update end time if provided
+		if (endTime) {
+			updateData.endTime = new Date(endTime);
+		}
+
+		// Update winner and isPlayed
+		if (winner) {
+			updateData.winner = winner;
+			updateData.isPlayed = true;
+		}
+
+		const updatedMatch = await Match.findByIdAndUpdate(
+			matchId,
+			{ $set: updateData },
+			{ new: true }
+		);
+
+		// Always return success when update is complete
+		return res.status(200).json({
+			success: true,
+			message: winner ? "Match Ends" : "Match updated",
+			match: updatedMatch,
+		});
+	} catch (error) {
+		return res.status(500).json({
+			success: false,
+			message: error.message,
+		});
+	}
 };
 
 const deleteMatch = async (req, res) => {
@@ -191,20 +228,71 @@ const deleteMatch = async (req, res) => {
 };
 
 const onGoingMatch = async (req, res) => {
-  try {
-    const { gameId } = req.params;
-    const onGoingMatch = await Match.findById({ _id: gameId }).populate({
-      path: "eventDetails",
-      select: "-matches",
-    });
-    if (!onGoingMatch) {
-      return res.status(404).json({ message: "Match details not found" });
-    }
+	try {
+		const { gameId } = req.params;
+		const match = await Match.findById(gameId)
+			.populate({
+				path: "eventDetails",
+				select: "-matches",
+			})
+			.lean(); // Using lean() for better performance
 
-    return res.status(200).json({ match: onGoingMatch });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+		if (!match) {
+			return res.status(404).json({ message: "Match not found" });
+		}
+
+		// Ensure matchTime is properly initialized and formatted
+		match.matchTime = {
+			minutes: parseInt(match.matchTime?.minutes || 0),
+			seconds: parseInt(match.matchTime?.seconds || 0),
+		};
+
+		return res.status(200).json({
+			success: true,
+			match: {
+				...match,
+				matchTime: match.matchTime, // Explicitly include matchTime in response
+			},
+		});
+	} catch (error) {
+		return res.status(500).json({ message: error.message });
+	}
+};
+
+const updateMatchTime = async (req, res) => {
+	try {
+		const { matchId } = req.params;
+		const { minutes, seconds } = req.body;
+
+		const updatedMatch = await Match.findByIdAndUpdate(
+			matchId,
+			{
+				$set: {
+					"matchTime.minutes": parseInt(minutes) || 0,
+					"matchTime.seconds": parseInt(seconds) || 0,
+				},
+			},
+			{ new: true }
+		);
+
+		if (!updatedMatch) {
+			return res.status(404).json({
+				success: false,
+				message: "Match not found",
+			});
+		}
+
+		return res.status(200).json({
+			success: true,
+			message: "Match time updated successfully",
+			match: updatedMatch,
+		});
+	} catch (error) {
+		return res.status(500).json({
+			success: false,
+			message: "Failed to update match time",
+		});
+	}
 };
 
 export {
@@ -214,4 +302,5 @@ export {
   endMatch,
   onGoingMatch,
   createMatch,
+  updateMatchTime,
 };
