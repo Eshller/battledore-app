@@ -203,24 +203,20 @@ function ScorePage() {
 		console.log("Sending player to ScoreSheet:", player);
 	};
 
-	const sendScore = (f_score, s_score, isActive, winner, startTime, endTime, shuttlecockCount) => {
-		socket.emit("update_score", {
-			_id: new Date().getMilliseconds(),
+	const sendScore = (f_score, s_score, isActive, winner, startTime, endTime, shuttlecockCount, scoringPlayer = null) => {
+		socket.emit("score", {
+			gameId: gameId.id,
 			firstTeamScore: f_score,
 			secondTeamScore: s_score,
 			status: isActive,
-			won: winner,
-			Id: gameId.id,
-			numberOfShuttlecock: shuttlecockCount || numberOfShuttlecock,
-			firstTeamName: matchData?.firstTeamName,
-			secondTeamName: matchData?.secondTeamName,
-			timestamp: new Date().toISOString(),
-			// Add service tracking data
-			servingTeam,
-			serviceCourt,
-			serverPlayer,
-			startTime: startTime ? startTime.toISOString() : null,
-			endTime: endTime ? endTime.toISOString() : null
+			winner: winner,
+			startTime: startTime,
+			endTime: endTime,
+			numberOfShuttlecock: shuttlecockCount,
+			servingTeam: servingTeam,
+			serviceCourt: serviceCourt,
+			serverPlayer: serverPlayer,
+			scoringPlayer: scoringPlayer
 		});
 	};
 
@@ -348,7 +344,7 @@ function ScorePage() {
 			matchData?.firstTeamName : matchData?.secondTeamName})`);
 		
 		// Send updated score to sync with other clients
-		sendScore(newTeamOneScore, newTeamTwoScore, "start", null, startTime, endTime, numberOfShuttlecock);
+		sendScore(newTeamOneScore, newTeamTwoScore, "start", null, startTime, endTime, numberOfShuttlecock, scoringPlayer);
 		
 		// Check for match point after undoing
 		checkForMatchPoint();
@@ -501,7 +497,7 @@ function ScorePage() {
 		return false;
 	};
 
-	const Team1 = () => {
+	const Team1 = (scoringPlayer) => {
 		const newTeamOneScore = (parseInt(teamOneScore) + 1).toString();
 		setTeamOneScore(newTeamOneScore);
 		// Update service tracking when team 1 scores
@@ -510,7 +506,28 @@ function ScorePage() {
 		// Reset the post-interval state when a score is made
 		setIsPostInterval(false);
 		
-		sendScore(newTeamOneScore, teamTwoScore, "start", null, matchStartTime, matchEndTime, numberOfShuttlecock);
+		const scoreData = {
+			gameId: gameId.id,
+			firstTeamScore: newTeamOneScore,
+			secondTeamScore: teamTwoScore,
+			status: "start",
+			won: null,
+			Id: gameId.id,
+			numberOfShuttlecock: numberOfShuttlecock,
+			firstTeamName: matchData?.firstTeamName,
+			secondTeamName: matchData?.secondTeamName,
+			timestamp: new Date().toISOString(),
+			servingTeam,
+			serviceCourt,
+			serverPlayer,
+			startTime: matchStartTime ? matchStartTime.toISOString() : null,
+			endTime: matchEndTime ? matchEndTime.toISOString() : null,
+			scoringPlayer: scoringPlayer,
+			scoringTeam: 'first', // Explicitly set the scoring team
+			individualScore: true // Flag to indicate this is an individual player score
+		};
+		
+		socket.emit("update_score", scoreData);
 		
 		// Check for interval
 		checkForInterval(1, newTeamOneScore);
@@ -521,7 +538,7 @@ function ScorePage() {
 		}
 	};
 
-	const Team2 = () => {
+	const Team2 = (scoringPlayer) => {
 		const newTeamTwoScore = (parseInt(teamTwoScore) + 1).toString();
 		setTeamTwoScore(newTeamTwoScore);
 		// Update service tracking when team 2 scores
@@ -530,7 +547,28 @@ function ScorePage() {
 		// Reset the post-interval state when a score is made
 		setIsPostInterval(false);
 		
-		sendScore(teamOneScore, newTeamTwoScore, "start", null, matchStartTime, matchEndTime, numberOfShuttlecock);
+		const scoreData = {
+			gameId: gameId.id,
+			firstTeamScore: teamOneScore,
+			secondTeamScore: newTeamTwoScore,
+			status: "start",
+			won: null,
+			Id: gameId.id,
+			numberOfShuttlecock: numberOfShuttlecock,
+			firstTeamName: matchData?.firstTeamName,
+			secondTeamName: matchData?.secondTeamName,
+			timestamp: new Date().toISOString(),
+			servingTeam,
+			serviceCourt,
+			serverPlayer,
+			startTime: matchStartTime ? matchStartTime.toISOString() : null,
+			endTime: matchEndTime ? matchEndTime.toISOString() : null,
+			scoringPlayer: scoringPlayer,
+			scoringTeam: 'second', // Explicitly set the scoring team
+			individualScore: true // Flag to indicate this is an individual player score
+		};
+		
+		socket.emit("update_score", scoreData);
 		
 		// Check for interval
 		checkForInterval(2, newTeamTwoScore);
@@ -541,41 +579,68 @@ function ScorePage() {
 		}
 	};
 
-	const handleButtonClick = (team) => {
-		if (team === "undo") {
+	const handleButtonClick = (side, player) => {
+		// If it's an undo action, handle it separately
+		if (side === "undo") {
 			undoChanges();
-			return; // Add return to make it clear this is a separate case
+			return;
 		}
 		
-		const isReceiverFirstTeam =
-			matchData?.firstTeamName === matchData?.receiver;
-		if (team === "right") {
-			isReceiverFirstTeam ? Team2() : Team1();
+		// If a specific player is provided, use that player
+		if (player) {
+			// Determine which team the player belongs to
+			const isFirstTeam = 
+				player === matchData?.playerOne || 
+				player === matchData?.playerThree;
+			
+			const isSecondTeam = 
+				player === matchData?.playerTwo || 
+				player === matchData?.playerFour;
+			
+			if (!player || (!isFirstTeam && !isSecondTeam)) {
+				console.error("Player not found or team cannot be determined");
+				return;
+			}
+
+			if (isFirstTeam) {
+				Team1(player);
+			} else if (isSecondTeam) {
+				Team2(player);
+			}
+			return;
+		}
+		
+		// Legacy handling for buttons without specific player
+		const isReceiverFirstTeam = matchData?.firstTeamName === matchData?.receiver;
+		if (side === "right") {
+			const player = isReceiverFirstTeam ? matchData?.playerTwo : matchData?.playerOne;
+			isReceiverFirstTeam ? Team2(player) : Team1(player);
 		} else {
-			isReceiverFirstTeam ? Team1() : Team2();
+			const player = isReceiverFirstTeam ? matchData?.playerOne : matchData?.playerTwo;
+			isReceiverFirstTeam ? Team1(player) : Team2(player);
 		}
 	};
 
 	const endMatchSession = () => {
 		const leftSideTeam =
 			matchData.firstTeamName === matchData.receiver
-				? matchData.secondTeamName
-				: matchData.firstTeamName;
+					? matchData.secondTeamName
+					: matchData.firstTeamName;
 
 		const rightSideTeam =
 			matchData.firstTeamName === matchData.receiver
-				? matchData.firstTeamName
-				: matchData.secondTeamName;
+					? matchData.firstTeamName
+					: matchData.secondTeamName;
 
 		const leftSideScore =
 			matchData.firstTeamName === matchData.receiver
-				? teamOneScore
-				: teamTwoScore;
+					? teamOneScore
+					: teamTwoScore;
 
 		const rightSideScore =
 			matchData.firstTeamName === matchData.receiver
-				? teamTwoScore
-				: teamOneScore;
+					? teamTwoScore
+					: teamOneScore;
 
 		let winner = "";
 		let loser = "";
@@ -584,15 +649,15 @@ function ScorePage() {
 			winner = `${leftSideTeam}`;
 			loser = `${
 				winner == matchData.firstTeamName
-					? matchData.secondTeamName
-					: matchData.firstTeamName
+						? matchData.secondTeamName
+						: matchData.firstTeamName
 			}`;
 		} else if (leftSideScore < rightSideScore) {
 			winner = `${rightSideTeam}`;
 			loser = `${
 				winner == matchData.firstTeamName
-					? matchData.secondTeamName
-					: matchData.firstTeamName
+						? matchData.secondTeamName
+						: matchData.firstTeamName
 			}`;
 		} else {
 			winner = "DRAW";
@@ -1620,14 +1685,44 @@ function ScorePage() {
 								<div className="absolute left-3/4 top-0 w-[2px] h-full bg-white"></div>
 							</div>
 							
-							{/* Score buttons moved outside the court */}
-							<button
-								className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
-								onClick={() => handleButtonClick(`left`)}
-								disabled={!matchStarted}
-							>
-								Score
-							</button>
+							{/* Score buttons for individual players on left side */}
+							{matchData?.playerThree && matchData?.playerThree !== "" ? (
+								<div className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] flex flex-col gap-4">
+									<button
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										onClick={() => {
+											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerOne : matchData?.playerTwo;
+											handleButtonClick(`left`, player);
+										}}
+										disabled={!matchStarted}
+									>
+										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerOne : matchData?.playerTwo} Score
+									</button>
+									<button
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										onClick={() => {
+											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerThree : matchData?.playerFour;
+											handleButtonClick(`left`, player);
+										}}
+										disabled={!matchStarted}
+									>
+										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerThree : matchData?.playerFour} Score
+									</button>
+								</div>
+							) : (
+								<button
+									className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
+									onClick={() => {
+										const player = matchData?.firstTeamName === matchData?.receiver 
+											? matchData?.playerOne 
+											: matchData?.playerTwo;
+										handleButtonClick("left", player);
+									}}
+									disabled={!matchStarted}
+								>
+									Score
+								</button>
+							)}
 							
 							{/* Left side of the court */}
 							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
@@ -1727,14 +1822,44 @@ function ScorePage() {
 								)}
 							</div>
 							
-							{/* Score button moved outside the court */}
-							<button
-								className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
-								onClick={() => handleButtonClick("right")}
-								disabled={!matchStarted}
-							>
-								Score
-							</button>
+							{/* Score buttons for individual players on right side */}
+							{matchData?.playerFour && matchData?.playerFour !== "" ? (
+								<div className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] flex flex-col gap-4">
+									<button
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										onClick={() => {
+											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerTwo : matchData?.playerOne;
+											handleButtonClick("right", player);
+										}}
+										disabled={!matchStarted}
+									>
+										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerTwo : matchData?.playerOne} Score
+									</button>
+									<button
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										onClick={() => {
+											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerFour : matchData?.playerThree;
+											handleButtonClick("right", player);
+										}}
+										disabled={!matchStarted}
+									>
+										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerFour : matchData?.playerThree} Score
+									</button>
+								</div>
+							) : (
+								<button
+									className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
+									onClick={() => {
+										const player = matchData?.firstTeamName === matchData?.receiver 
+											? matchData?.playerTwo 
+											: matchData?.playerOne;
+										handleButtonClick("right", player);
+									}}
+									disabled={!matchStarted}
+								>
+									Score
+								</button>
+							)}
 						</div>
 					</div>
 				</div>

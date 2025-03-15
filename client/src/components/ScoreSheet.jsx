@@ -34,7 +34,9 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
             timestamp: new Date().toISOString(),
             isMisconduct: false,
             firstTeamName: matchData.firstTeamName,
-            secondTeamName: matchData.secondTeamName
+            secondTeamName: matchData.secondTeamName,
+            scoringPlayer: data.scoringPlayer,
+            individualScore: data.individualScore || false
           };
 
           const existingMisconducts = prev.filter(entry =>
@@ -232,14 +234,14 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                   className="border border-[#5ea0b8] text-center px-4 py-2 min-w-[40px]"
                 >
                   <div className="flex flex-col items-center">
-                    {/* Always show score if it exists */}
+                    {/* Show score */}
                     <div>
                       {index === 0 ? 'S' :
                         index === 1 ? '0' :
-                          leftSideTeam === matchData.firstTeamName
-                            ? (row.scoringTeam === 'second' ? row.secondTeamScore : '')
-                            : (row.scoringTeam === 'first' ? row.firstTeamScore : '')}
+                          (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)) ?
+                            (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
                     </div>
+                    {/* Remove scoring player indicator */}
                     {/* Show misconduct below score if it exists */}
                     {row.isMisconduct && row.misconductPlayer === (
                       leftSideTeam === matchData.firstTeamName
@@ -289,9 +291,24 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                     key={index}
                     className="border border-[#5ea0b8] text-center"
                   >
-                    {leftSideTeam === matchData.firstTeamName
-                      ? (row.scoringTeam === 'second' ? row.secondTeamScore : '')
-                      : (row.scoringTeam === 'first' ? row.firstTeamScore : '')}
+                    <div className="flex flex-col items-center">
+                      {/* Show score */}
+                      <div>
+                        {(row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerThree : matchData.playerFour)) ?
+                          (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
+                      </div>
+                      {/* Remove scoring player indicator */}
+                      {/* Show misconduct below score if it exists */}
+                      {row.isMisconduct && row.misconductPlayer === (
+                        leftSideTeam === matchData.firstTeamName
+                          ? matchData.playerThree
+                          : matchData.playerFour
+                      ) && (
+                          <div className="text-sm font-bold mt-1">
+                            {row.misconductType}
+                          </div>
+                        )}
+                    </div>
                   </td>
                 ))}
               </tr>
@@ -312,17 +329,17 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                   className="border border-[#5ea0b8] border-t-4 text-center px-4 py-2 min-w-[40px]"
                 >
                   <div className="flex flex-col items-center">
-                    {/* Always show score if it exists */}
+                    {/* Show score */}
                     <div>
                       {index === 0 && matchData.server === (
                         leftSideTeam === matchData.firstTeamName
                           ? matchData.playerTwo
                           : matchData.playerOne) ? 'S' :
                         index === 1 ? '0' :
-                          leftSideTeam === matchData.firstTeamName
-                            ? (row.scoringTeam === 'first' ? row.firstTeamScore : '')
-                            : (row.scoringTeam === 'second' ? row.secondTeamScore : '')}
+                          (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)) ?
+                            (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
                     </div>
+                    {/* Remove scoring player indicator */}
                     {/* Show misconduct below score if it exists */}
                     {row.isMisconduct && row.misconductPlayer === (
                       leftSideTeam === matchData.firstTeamName
@@ -382,9 +399,24 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                     key={index}
                     className="border border-[#5ea0b8] text-center"
                   >
-                    {leftSideTeam === matchData.firstTeamName
-                      ? (row.scoringTeam === 'second' ? row.secondTeamScore : '')
-                      : (row.scoringTeam === 'first' ? row.firstTeamScore : '')}
+                    <div className="flex flex-col items-center">
+                      {/* Show score */}
+                      <div>
+                        {(row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerFour : matchData.playerThree)) ?
+                          (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
+                      </div>
+                      {/* Remove scoring player indicator */}
+                      {/* Show misconduct below score if it exists */}
+                      {row.isMisconduct && row.misconductPlayer === (
+                        leftSideTeam === matchData.firstTeamName
+                          ? matchData.playerFour
+                          : matchData.playerThree
+                      ) && (
+                          <div className="text-sm font-bold mt-1">
+                            {row.misconductType}
+                          </div>
+                        )}
+                    </div>
                   </td>
                 ))}
               </tr>
