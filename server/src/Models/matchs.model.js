@@ -28,6 +28,7 @@ const matSchema = new Schema(
         "Men's doubles",
         "Women's singles",
         "Women's doubles",
+        "Mixed Doubles",
       ],
       required: true,
       trim: true,
@@ -58,6 +59,12 @@ const matSchema = new Schema(
       type: String,
       required: true,
     },
+    totalPoints: {
+      type: Number,
+      enum: [15, 21],
+      default: 21,
+      required: true,
+    },
     server: {
       type: String,
       default: "",
@@ -65,6 +72,30 @@ const matSchema = new Schema(
     receiver: {
       type: String,
       default: "",
+    },
+    rightTeam: {
+      type: String,
+      default: "",
+    },
+    matchTime: {
+      minutes: {
+        type: Number,
+        default: 0,
+        required: true,
+      },
+      seconds: {
+        type: Number,
+        default: 0,
+        required: true,
+      },
+    },
+    startTime: {
+      type: Date,
+      default: null,
+    },
+    endTime: {
+      type: Date,
+      default: null,
     },
     scores: [scoreSchema],
     eventDetails: {
@@ -104,5 +135,26 @@ const matSchema = new Schema(
     timestamps: true,
   }
 );
+
+// Add a pre-save middleware to ensure matchTime is always set
+matSchema.pre('save', function(next) {
+  if (!this.matchTime) {
+    this.matchTime = { minutes: 0, seconds: 0 };
+  }
+  next();
+});
+
+// Add middleware to handle matchTime on updates
+matSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate();
+  if (update.$set && update.$set.matchTime) {
+    // Ensure numbers are properly parsed
+    update.$set.matchTime = {
+      minutes: parseInt(update.$set.matchTime.minutes) || 0,
+      seconds: parseInt(update.$set.matchTime.seconds) || 0
+    };
+  }
+  next();
+});
 
 export const Match = mongoose.model("Match", matSchema);
