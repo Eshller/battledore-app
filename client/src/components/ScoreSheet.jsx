@@ -122,7 +122,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
         secondTeamName,
         scoringTeam: 'start',
         status: 'initial',
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(0).toISOString(), // Use earliest possible timestamp for initial state
         isMisconduct: false
       };
 
@@ -130,6 +130,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
       // This ensures that on the score page, we always use matchData.scores for real-time updates
       const scoreData = (!isScorePage && scores.length > 0) ? scores : (matchData.scores || []);
       
+      // Create score entries with proper timestamps
       const scoreEntries = scoreData.map((score, index) => {
         const previousScore = index > 0 ? scoreData[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
         const scoringTeam =
@@ -146,7 +147,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           secondTeamName,
           scoringTeam,
           status: 'start',
-          timestamp: score.createdAt || new Date().toISOString(),
+          timestamp: score.createdAt || score.timestamp || new Date().toISOString(),
           numberOfShuttlecock: score.numberOfShuttlecock,
           isMisconduct: false,
           scoringPlayer: score.scoringPlayer,
@@ -154,10 +155,18 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
         };
       });
 
+      // Create misconduct entries with proper score context
       const misconductEntries = misconducts.map(m => {
-        const matchingScore = [...scoreEntries].reverse().find(score =>
+        // Find the most recent score entry before this misconduct
+        const matchingScore = [...scoreEntries].filter(score =>
           new Date(score.timestamp) <= new Date(m.timestamp)
-        ) || { firstTeamScore: "0", secondTeamScore: "0" };
+        ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0] || 
+        { 
+          firstTeamScore: "0", 
+          secondTeamScore: "0",
+          firstTeamName,
+          secondTeamName
+        };
 
         return {
           ...matchingScore,
@@ -170,9 +179,11 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
         };
       });
 
+      // Combine all entries and sort by timestamp
       const allEntries = [...scoreEntries, ...misconductEntries]
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+      // Set the table data with initial state and all entries
       setTableData([initialState, ...allEntries]);
     };
 
@@ -186,10 +197,21 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
     const prevMisconducts = prevMisconductsRef.current || [];
     if (misconducts.length > prevMisconducts.length) {
       const newMisconducts = misconducts.slice(prevMisconducts.length);
+      
+      // Create a copy of the current table data to avoid losing previous records
+      let updatedTableData = [...tableData];
+      
       newMisconducts.forEach(m => {
-        const matchingScore = [...tableData].reverse().find(entry =>
+        // Find the most recent score entry before this misconduct
+        const matchingScore = [...updatedTableData].filter(entry => 
           !entry.isMisconduct && new Date(entry.timestamp) <= new Date(m.timestamp)
-        ) || { firstTeamScore: "0", secondTeamScore: "0" };
+        ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0] || 
+        { 
+          firstTeamScore: "0", 
+          secondTeamScore: "0",
+          firstTeamName: matchData?.firstTeamName,
+          secondTeamName: matchData?.secondTeamName
+        };
 
         const newEntry = {
           ...matchingScore,
@@ -200,14 +222,21 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           misconductType: m.type,
           misconductPlayer: m.player
         };
-
-        setTableData(prev => [...prev, newEntry].sort((a, b) =>
-          new Date(a.timestamp) - new Date(b.timestamp))
-        );
+        
+        // Add the new entry to our updated data
+        updatedTableData.push(newEntry);
       });
+      
+      // Sort the updated data by timestamp
+      updatedTableData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      // Update the table data with all entries preserved
+      setTableData(updatedTableData);
     }
+    
+    // Update the ref to the current misconducts
     prevMisconductsRef.current = misconducts;
-  }, [misconducts, tableData]);
+  }, [misconducts, matchData]);
 
 
   const renderMisconducts = React.useCallback((playerName) => {
@@ -228,16 +257,17 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           key={`${m.player}-${m.type}-${index}-${m.timestamp}`}
           className="text-center font-inter px-2 inline-block"
         >
-          <h1 className={`font-bold text-xl bg-yellow-400 rounded-md w-6 p-0 m-auto my-0 ${m.type === "W" ? "text-yellow-700" :
-            m.type === "F" ? "text-red-700" :
-              m.type === "R" ? "text-blue-700" :
-                m.type === "S" ? "text-green-700" :
-                  m.type === "O" ? "text-purple-700" :
-                    m.type === "I" ? "text-orange-700" :
-                      m.type === "DIS" ? "text-red-700" :
-                        m.type === "RET" ? "text-blue-700" :
-                          m.type === "C" ? "text-green-700" : null
-            }`}>
+          <h1 className={`font-bold text-xl rounded-md w-6 p-0 m-auto my-0 ${
+            m.type === "W" ? "bg-yellow-400 text-yellow-700" :
+            m.type === "F" ? "bg-red-500 text-red-700" :
+            m.type === "R" ? "bg-blue-200 text-blue-700" :
+            m.type === "S" ? "bg-green-200 text-green-700" :
+            m.type === "O" ? "bg-purple-200 text-purple-700" :
+            m.type === "I" ? "bg-orange-200 text-orange-700" :
+            m.type === "DIS" ? "bg-slate-700 text-slate-400" :
+            m.type === "RET" ? "bg-blue-200 text-blue-700" :
+            m.type === "C" ? "bg-green-200 text-green-700" : ""
+          }`}>
             {m.type}
           </h1>
           <p className="font-semibold text-xs">
@@ -314,10 +344,20 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                         ? matchData.playerOne
                         : matchData.playerTwo
                     ) && (
-                        <div className="text-sm font-bold mt-1">
-                          {row.misconductType}
-                        </div>
-                      )}
+                      <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                        row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                        row.misconductType === "F" ? "bg-red-500 text-white" :
+                        row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                        row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                        row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                        row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                        row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                        row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                        row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                      }`}>
+                        {row.misconductType}
+                      </div>
+                    )}
                   </div>
                 </td>
               ))}
@@ -373,10 +413,20 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                           ? matchData.playerThree
                           : matchData.playerFour
                       ) && (
-                          <div className="text-sm font-bold mt-1">
-                            {row.misconductType}
-                          </div>
-                        )}
+                        <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                          row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                          row.misconductType === "F" ? "bg-red-500 text-white" :
+                          row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                          row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                          row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                          row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                          row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                          row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                          row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                        }`}>
+                          {row.misconductType}
+                        </div>
+                      )}
                     </div>
                   </td>
                 ))}
@@ -418,7 +468,17 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                         ? matchData.playerTwo
                         : matchData.playerOne
                     ) && (
-                        <div className="text-sm font-bold mt-1">
+                        <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                          row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                          row.misconductType === "F" ? "bg-red-500 text-white" :
+                          row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                          row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                          row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                          row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                          row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                          row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                          row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                        }`}>
                           {row.misconductType}
                         </div>
                       )}
@@ -487,10 +547,20 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                           ? matchData.playerFour
                           : matchData.playerThree
                       ) && (
-                          <div className="text-sm font-bold mt-1">
-                            {row.misconductType}
-                          </div>
-                        )}
+                        <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                          row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                          row.misconductType === "F" ? "bg-red-500 text-white" :
+                          row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                          row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                          row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                          row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                          row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                          row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                          row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                        }`}>
+                          {row.misconductType}
+                        </div>
+                      )}
                     </div>
                   </td>
                 ))}

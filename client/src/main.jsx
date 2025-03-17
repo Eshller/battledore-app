@@ -11,7 +11,7 @@ import {
   Login,
   Signup,
   Home,
-  Players,
+  Accounts,
   Events,
   Recent_Event,
   Weekly_Event,
@@ -31,6 +31,7 @@ import {
   createRoutesFromElements,
   Route,
   RouterProvider,
+  Navigate,
 } from "react-router-dom";
 
 const router = createBrowserRouter(
@@ -42,7 +43,8 @@ const router = createBrowserRouter(
       <Route path="forgotpassword" element={<ForgotPassword />} />
       <Route element={<App />}>
         <Route path="home" element={<Home />} />
-        <Route path="players" element={<Players />} />
+        <Route path="accounts" element={<Accounts />} />
+        <Route path="players" element={<Navigate to="/accounts" replace />} />
         <Route path="livescore" element={<LiveScore />} />
         <Route path="matchdetails/:id" element={<MatchDetails />} />
         <Route path="events" element={<Events />}>
