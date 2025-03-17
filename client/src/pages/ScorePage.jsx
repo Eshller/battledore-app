@@ -15,16 +15,16 @@ function ScorePage() {
 		useService();
 	const gameId = useParams();
 	const Navigate = useNavigate();
-	
+
 	// Add new state variables for service tracking
 	const [servingTeam, setServingTeam] = useState(1); // 1 for first team, 2 for second team
 	const [serviceCourt, setServiceCourt] = useState("right"); // "right" or "left"
 	const [serverPlayer, setServerPlayer] = useState(""); // Name of the current server
 	const [receiverPlayer, setReceiverPlayer] = useState(""); // Name of the current receiver
-	
+
 	// Add state variable for serve indicator
 	const [showServeIndicator, setShowServeIndicator] = useState(true);
-	
+
 	// Add a ref to track if this is the initial score change
 	const isInitialScoreChange = useRef(true);
 
@@ -42,7 +42,7 @@ function ScorePage() {
 					setTeamTwoScore(lastScore.secondTeamScore);
 					setNumberOfShuttlecock(lastScore.numberOfShuttlecock || "1");
 					setMatchStarted(true);
-					
+
 					// Reset the initial score change flag
 					isInitialScoreChange.current = true;
 
@@ -52,7 +52,7 @@ function ScorePage() {
 						lastScore.secondTeamScore,
 						"start"
 					);
-					
+
 					// Initialize service tracking if available in match data
 					if (lastScore.servingTeam) {
 						setServingTeam(lastScore.servingTeam);
@@ -125,7 +125,30 @@ function ScorePage() {
 	useEffect(() => {
 		socket.on("misconduct_updated", (data) => {
 			if (data.matchId === gameId.id) {
-				setMisconducts((prev) => [...prev, data.misconduct]);
+				// Add the new misconduct to the existing list
+				setMisconducts((prev) => {
+					// Check if this misconduct already exists to avoid duplicates
+					const isDuplicate = prev.some(
+						(m) =>
+							m.player === data.misconduct.player &&
+							m.type === data.misconduct.type &&
+							new Date(m.timestamp).getTime() ===
+								new Date(data.misconduct.timestamp).getTime()
+					);
+
+					// If it's a duplicate, don't add it
+					if (isDuplicate) {
+						return prev;
+					}
+
+					// Create a copy of the previous misconducts
+					const updatedMisconducts = [...prev];
+
+					// Add the new misconduct
+					updatedMisconducts.push(data.misconduct);
+
+					return updatedMisconducts;
+				});
 			}
 		});
 
@@ -159,12 +182,15 @@ function ScorePage() {
 			return;
 		}
 
+		// Create a timestamp for the misconduct
+		const timestamp = new Date();
+
 		const misconductData = {
 			matchId: gameId.id,
 			misconduct: {
 				player: player,
 				type: type,
-				timestamp: new Date(),
+				timestamp: timestamp,
 			},
 		};
 
@@ -175,39 +201,57 @@ function ScorePage() {
 		const newMisconduct = {
 			player: player,
 			type: type,
-			timestamp: new Date(),
+			timestamp: timestamp,
 		};
-		setMisconducts((prev) => [...prev, newMisconduct]);
+
+		// Add the new misconduct to the existing list
+		setMisconducts((prev) => {
+			// Create a copy of the previous misconducts
+			const updatedMisconducts = [...prev];
+
+			// Add the new misconduct
+			updatedMisconducts.push(newMisconduct);
+
+			return updatedMisconducts;
+		});
 
 		// Reset misconduct selection state
 		setMisconduct("");
 		setSelectedPlayer("");
 		setMisconductBox(false);
+
+		// Show success message
+		toast.success(`${type} misconduct added for ${player}`);
 	};
 
 	const handleMisconduct = (e) => {
 		setMisconduct(e);
-		if (step === 1) {
-			handleMisconductSelect(e, selectedPlayer);
-			setStep(2);
-		} else {
-			setStep(1);
-		}
+		setStep(2); // Always go to player selection after selecting misconduct type
 	};
 
 	const handlePlayerSelect = (e) => {
-		setSelectedPlayer(e.target.value);
-		sendToScoreSheet(e.target.value);
-		setMisconductBox(false);
-		setStep(1);
-		// alert("Player Marked")
+		const player = e.target.value;
+		setSelectedPlayer(player);
+
+		if (player && misconduct) {
+			handleMisconductSelect(misconduct, player);
+		}
 	};
 
 	const sendToScoreSheet = (player) => {
 		console.log("Sending player to ScoreSheet:", player);
 	};
 
-	const sendScore = (f_score, s_score, isActive, winner, startTime, endTime, shuttlecockCount, scoringPlayer = null) => {
+	const sendScore = (
+		f_score,
+		s_score,
+		isActive,
+		winner,
+		startTime,
+		endTime,
+		shuttlecockCount,
+		scoringPlayer = null
+	) => {
 		const scoreData = {
 			gameId: gameId.id,
 			firstTeamScore: f_score,
@@ -225,11 +269,11 @@ function ScorePage() {
 			timestamp: new Date().toISOString(),
 			firstTeamName: matchData?.firstTeamName,
 			secondTeamName: matchData?.secondTeamName,
-			individualScore: scoringPlayer ? true : false
+			individualScore: scoringPlayer ? true : false,
 		};
-		
+
 		console.log("Sending score update:", scoreData);
-		
+
 		// Emit to both score and update_score events to ensure all components receive the update
 		socket.emit("score", scoreData);
 		socket.emit("update_score", scoreData);
@@ -242,26 +286,28 @@ function ScorePage() {
 			toast.info("No points to undo");
 			return;
 		}
-		
+
 		// In badminton, we need to determine which team scored last and who was serving
 		let lastScoringTeam = null;
 		let previousServingTeam = null;
 		let newTeamOneScore = teamOneScore;
 		let newTeamTwoScore = teamTwoScore;
-		
+
 		// Try to determine the last scoring team from match data history
 		const scores = matchData?.scores || [];
-		
+
 		// Find the previous score state
 		let previousScore = null;
-		
+
 		// If we have score history, use it to find the previous state
 		if (scores.length > 1) {
 			// Find the current score in the history
 			for (let i = scores.length - 1; i >= 0; i--) {
 				const score = scores[i];
-				if (score.firstTeamScore === teamOneScore && 
-					score.secondTeamScore === teamTwoScore) {
+				if (
+					score.firstTeamScore === teamOneScore &&
+					score.secondTeamScore === teamTwoScore
+				) {
 					// Found current score, get the previous one
 					if (i > 0) {
 						previousScore = scores[i - 1];
@@ -270,19 +316,21 @@ function ScorePage() {
 				}
 			}
 		}
-		
+
 		if (previousScore) {
 			// If we found previous score data, use it
 			newTeamOneScore = previousScore.firstTeamScore;
 			newTeamTwoScore = previousScore.secondTeamScore;
-			
+
 			// Determine which team scored last by comparing current and previous scores
 			if (parseInt(teamOneScore) > parseInt(previousScore.firstTeamScore)) {
 				lastScoringTeam = 1;
-			} else if (parseInt(teamTwoScore) > parseInt(previousScore.secondTeamScore)) {
+			} else if (
+				parseInt(teamTwoScore) > parseInt(previousScore.secondTeamScore)
+			) {
 				lastScoringTeam = 2;
 			}
-			
+
 			// Also restore service tracking if available
 			if (previousScore.servingTeam) {
 				setServingTeam(previousScore.servingTeam);
@@ -294,7 +342,7 @@ function ScorePage() {
 			// If no history or can't find previous score, use logic
 			const team1Points = parseInt(teamOneScore);
 			const team2Points = parseInt(teamTwoScore);
-			
+
 			if (team1Points > team2Points) {
 				// Team 1 is likely the last to score
 				lastScoringTeam = 1;
@@ -312,7 +360,7 @@ function ScorePage() {
 					newTeamTwoScore = (team2Points - 1).toString();
 				}
 			}
-			
+
 			// Update service tracking based on badminton rules
 			if (lastScoringTeam) {
 				// In badminton, the right to serve changes only when the receiving side scores
@@ -323,48 +371,66 @@ function ScorePage() {
 					const newServingTeam = lastScoringTeam === 1 ? 2 : 1;
 					setServingTeam(newServingTeam);
 					previousServingTeam = newServingTeam;
-					
+
 					// Determine service court based on the score of the new serving team
-					const relevantScore = newServingTeam === 1 ? 
-						parseInt(newTeamOneScore) : parseInt(newTeamTwoScore);
-					
+					const relevantScore =
+						newServingTeam === 1
+							? parseInt(newTeamOneScore)
+							: parseInt(newTeamTwoScore);
+
 					setServiceCourt(relevantScore % 2 === 0 ? "right" : "left");
-					
+
 					// Update server player
 					updateServerPlayer(newServingTeam, relevantScore);
 				} else {
 					// The last scoring team was already serving and scored again
 					// So they keep the service, but we need to update the court
-					const relevantScore = servingTeam === 1 ? 
-						parseInt(newTeamOneScore) : parseInt(newTeamTwoScore);
-					
+					const relevantScore =
+						servingTeam === 1
+							? parseInt(newTeamOneScore)
+							: parseInt(newTeamTwoScore);
+
 					setServiceCourt(relevantScore % 2 === 0 ? "right" : "left");
-					
+
 					// Update server player
 					updateServerPlayer(servingTeam, relevantScore);
 				}
 			}
 		}
-		
+
 		// Safety check - don't allow negative scores
 		if (parseInt(newTeamOneScore) < 0) newTeamOneScore = "0";
 		if (parseInt(newTeamTwoScore) < 0) newTeamTwoScore = "0";
-		
+
 		// Update the scores
 		setTeamOneScore(newTeamOneScore);
 		setTeamTwoScore(newTeamTwoScore);
-		
+
 		// Show toast notification for feedback
-		toast.success(`Last point undone (${lastScoringTeam === 1 ? 
-			matchData?.firstTeamName : matchData?.secondTeamName})`);
-		
+		toast.success(
+			`Last point undone (${
+				lastScoringTeam === 1
+					? matchData?.firstTeamName
+					: matchData?.secondTeamName
+			})`
+		);
+
 		// Send updated score to sync with other clients
-		sendScore(newTeamOneScore, newTeamTwoScore, "start", null, startTime, endTime, numberOfShuttlecock, scoringPlayer);
-		
+		sendScore(
+			newTeamOneScore,
+			newTeamTwoScore,
+			"start",
+			null,
+			startTime,
+			endTime,
+			numberOfShuttlecock,
+			scoringPlayer
+		);
+
 		// Check for match point after undoing
 		checkForMatchPoint();
 	};
-	
+
 	// Helper function to update server player based on team and score
 	const updateServerPlayer = (team, score) => {
 		if (!matchData?.playerThree && !matchData?.playerFour) {
@@ -373,9 +439,13 @@ function ScorePage() {
 		} else {
 			// Doubles - server alternates based on score
 			if (team === 1) {
-				setServerPlayer(score % 2 === 0 ? matchData?.playerOne : matchData?.playerThree);
+				setServerPlayer(
+					score % 2 === 0 ? matchData?.playerOne : matchData?.playerThree
+				);
 			} else {
-				setServerPlayer(score % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour);
+				setServerPlayer(
+					score % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour
+				);
 			}
 		}
 	};
@@ -383,10 +453,10 @@ function ScorePage() {
 	const checkForInterval = (team, score) => {
 		// Don't trigger interval if it's already showing
 		if (showInterval) return;
-		
+
 		// Check if we've reached the interval point based on match total points
 		const intervalPoint = matchData?.totalPoints === 15 ? 8 : 11;
-		
+
 		// Check if this team just reached the interval point
 		if (parseInt(score) === intervalPoint) {
 			// Pause the match timer
@@ -394,22 +464,22 @@ function ScorePage() {
 				clearInterval(timerIntervalRef.current);
 				setIsMatchTimerRunning(false);
 			}
-			
+
 			// Show the interval UI
 			setIntervalTeam(team);
 			setShowInterval(true);
 			setIntervalTimeLeft(120); // Reset interval timer to 2 minutes
-			
+
 			// Emit interval start event to sync with other clients
 			socket.emit("interval_start", {
 				matchId: gameId.id,
 				team: team,
-				timeLeft: 120
+				timeLeft: 120,
 			});
-			
+
 			// Start interval timer
 			intervalTimerRef.current = setInterval(() => {
-				setIntervalTimeLeft(prev => {
+				setIntervalTimeLeft((prev) => {
 					if (prev <= 1) {
 						// Auto-resume match when timer reaches zero
 						resumeAfterInterval();
@@ -418,9 +488,13 @@ function ScorePage() {
 					return prev - 1;
 				});
 			}, 1000);
-			
+
 			// Notify via toast
-			toast.info(`Interval - ${team === 1 ? matchData?.firstTeamName : matchData?.secondTeamName} reached ${intervalPoint} points`);
+			toast.info(
+				`Interval - ${
+					team === 1 ? matchData?.firstTeamName : matchData?.secondTeamName
+				} reached ${intervalPoint} points`
+			);
 		}
 	};
 
@@ -428,102 +502,108 @@ function ScorePage() {
 	const checkForMatchPoint = () => {
 		// Get the winning score based on match type
 		const winningScore = matchData?.totalPoints || 21;
-		
+
 		// Get current scores as integers
 		const team1Score = parseInt(teamOneScore);
 		const team2Score = parseInt(teamTwoScore);
-		
+
 		// Reset match point if no longer applicable
 		if (team1Score < winningScore - 1 && team2Score < winningScore - 1) {
 			setMatchPoint(null);
 			return;
 		}
-		
+
 		// Check for match point for team 1
 		if (team1Score >= winningScore - 1 && team1Score - team2Score >= 1) {
 			setMatchPoint(1);
 			return;
 		}
-		
+
 		// Check for match point for team 2
 		if (team2Score >= winningScore - 1 && team2Score - team1Score >= 1) {
 			setMatchPoint(2);
 			return;
 		}
-		
+
 		// No match point
 		setMatchPoint(null);
 	};
-	
+
 	// Check if a team has won the match
 	const checkForWin = () => {
 		// Get the winning score based on match type
 		const winningScore = matchData?.totalPoints || 21;
-		
+
 		// Get current scores as integers
 		const team1Score = parseInt(teamOneScore);
 		const team2Score = parseInt(teamTwoScore);
-		
+
 		// Prevent win check at the very start of the match
 		if (team1Score === 0 && team2Score === 0) {
 			return false;
 		}
-		
+
 		// Check if team 1 has won
-		if ((team1Score >= winningScore && team1Score - team2Score >= 2) || 
-			(team1Score >= winningScore + 9)) { // Maximum score is winning score + 9
+		if (
+			(team1Score >= winningScore && team1Score - team2Score >= 2) ||
+			team1Score >= winningScore + 9
+		) {
+			// Maximum score is winning score + 9
 			setWinningTeam(1);
 			setShowWinAnimation(true);
-			
+
 			// Record the match end time
 			const endTime = new Date();
 			setMatchEndTime(endTime);
-			
+
 			// Automatically end the match after a shorter animation
 			setTimeout(() => {
 				setShowWinAnimation(false);
 				stopMatchTimer();
 				end(); // Call end directly instead of endMatchSession
 			}, 1500); // Reduced from 3000ms to 1500ms
-			
+
 			return true;
 		}
-		
+
 		// Check if team 2 has won
-		if ((team2Score >= winningScore && team2Score - team1Score >= 2) || 
-			(team2Score >= winningScore + 9)) { // Maximum score is winning score + 9
+		if (
+			(team2Score >= winningScore && team2Score - team1Score >= 2) ||
+			team2Score >= winningScore + 9
+		) {
+			// Maximum score is winning score + 9
 			setWinningTeam(2);
 			setShowWinAnimation(true);
-			
+
 			// Record the match end time
 			const endTime = new Date();
 			setMatchEndTime(endTime);
-			
+
 			// Automatically end the match after a shorter animation
 			setTimeout(() => {
 				setShowWinAnimation(false);
 				stopMatchTimer();
 				end(); // Call end directly instead of endMatchSession
 			}, 1500); // Reduced from 3000ms to 1500ms
-			
+
 			return true;
 		}
-		
+
 		return false;
 	};
 
 	const Team1 = (scoringPlayer) => {
 		// Hide serve indicator when a point is scored
 		setShowServeIndicator(false);
-		
+
 		const newTeamOneScore = (parseInt(teamOneScore) + 1).toString();
 		setTeamOneScore(newTeamOneScore);
 		// Update service tracking when team 1 scores
 		updateService(1);
-		
+
 		// Reset the post-interval state when a score is made
 		setIsPostInterval(false);
-		
+
 		const scoreData = {
 			gameId: gameId.id,
 			firstTeamScore: newTeamOneScore,
@@ -542,15 +622,15 @@ function ScorePage() {
 			startTime: matchStartTime ? matchStartTime.toISOString() : null,
 			endTime: matchEndTime ? matchEndTime.toISOString() : null,
 			scoringPlayer: scoringPlayer,
-			scoringTeam: 'first', // Explicitly set the scoring team
-			individualScore: true // Flag to indicate this is an individual player score
+			scoringTeam: "first", // Explicitly set the scoring team
+			individualScore: true, // Flag to indicate this is an individual player score
 		};
-		
+
 		socket.emit("update_score", scoreData);
-		
+
 		// Check for interval
 		checkForInterval(1, newTeamOneScore);
-		
+
 		// Check for win first, then match point if no win
 		if (!checkForWin()) {
 			checkForMatchPoint();
@@ -560,15 +640,15 @@ function ScorePage() {
 	const Team2 = (scoringPlayer) => {
 		// Hide serve indicator when a point is scored
 		setShowServeIndicator(false);
-		
+
 		const newTeamTwoScore = (parseInt(teamTwoScore) + 1).toString();
 		setTeamTwoScore(newTeamTwoScore);
 		// Update service tracking when team 2 scores
 		updateService(2);
-		
+
 		// Reset the post-interval state when a score is made
 		setIsPostInterval(false);
-		
+
 		const scoreData = {
 			gameId: gameId.id,
 			firstTeamScore: teamOneScore,
@@ -587,15 +667,15 @@ function ScorePage() {
 			startTime: matchStartTime ? matchStartTime.toISOString() : null,
 			endTime: matchEndTime ? matchEndTime.toISOString() : null,
 			scoringPlayer: scoringPlayer,
-			scoringTeam: 'second', // Explicitly set the scoring team
-			individualScore: true // Flag to indicate this is an individual player score
+			scoringTeam: "second", // Explicitly set the scoring team
+			individualScore: true, // Flag to indicate this is an individual player score
 		};
-		
+
 		socket.emit("update_score", scoreData);
-		
+
 		// Check for interval
 		checkForInterval(2, newTeamTwoScore);
-		
+
 		// Check for win first, then match point if no win
 		if (!checkForWin()) {
 			checkForMatchPoint();
@@ -608,18 +688,16 @@ function ScorePage() {
 			undoChanges();
 			return;
 		}
-		
+
 		// If a specific player is provided, use that player
 		if (player) {
 			// Determine which team the player belongs to
-			const isFirstTeam = 
-				player === matchData?.playerOne || 
-				player === matchData?.playerThree;
-			
-			const isSecondTeam = 
-				player === matchData?.playerTwo || 
-				player === matchData?.playerFour;
-			
+			const isFirstTeam =
+				player === matchData?.playerOne || player === matchData?.playerThree;
+
+			const isSecondTeam =
+				player === matchData?.playerTwo || player === matchData?.playerFour;
+
 			if (!player || (!isFirstTeam && !isSecondTeam)) {
 				console.error("Player not found or team cannot be determined");
 				return;
@@ -632,14 +710,18 @@ function ScorePage() {
 			}
 			return;
 		}
-		
+
 		// Legacy handling for buttons without specific player
 		const isReceiverFirstTeam = matchData?.firstTeamName === matchData.receiver;
 		if (side === "right") {
-			const player = isReceiverFirstTeam ? matchData?.playerTwo : matchData?.playerOne;
+			const player = isReceiverFirstTeam
+				? matchData?.playerTwo
+				: matchData?.playerOne;
 			isReceiverFirstTeam ? Team2(player) : Team1(player);
 		} else {
-			const player = isReceiverFirstTeam ? matchData?.playerOne : matchData?.playerTwo;
+			const player = isReceiverFirstTeam
+				? matchData?.playerOne
+				: matchData?.playerTwo;
 			isReceiverFirstTeam ? Team1(player) : Team2(player);
 		}
 	};
@@ -648,12 +730,12 @@ function ScorePage() {
 		// Get the actual team scores directly
 		const teamOneScoreInt = parseInt(teamOneScore);
 		const teamTwoScoreInt = parseInt(teamTwoScore);
-		
+
 		console.log("End Match Session - Teams and Scores:", {
 			teamOneScore: teamOneScoreInt,
 			teamTwoScore: teamTwoScoreInt,
 			firstTeamName: matchData?.firstTeamName,
-			secondTeamName: matchData?.secondTeamName
+			secondTeamName: matchData?.secondTeamName,
 		});
 
 		let winner = "";
@@ -688,7 +770,7 @@ function ScorePage() {
 			// If coming from win animation, call end directly
 			end();
 		}
-		
+
 		return winner;
 	};
 
@@ -696,14 +778,14 @@ function ScorePage() {
 		try {
 			// If win animation is showing, hide it
 			setShowWinAnimation(false);
-			
+
 			// Close the confirmation dialog
 			setEndMatchConfirmation(false);
-			
+
 			// Record the match end time
 			const endTime = new Date();
 			setMatchEndTime(endTime);
-			
+
 			// Stop the timer first
 			stopMatchTimer();
 
@@ -735,12 +817,12 @@ function ScorePage() {
 					seconds: parseInt(seconds),
 				},
 				startTime: matchStartTime ? matchStartTime.toISOString() : null,
-				endTime: endTime.toISOString()
+				endTime: endTime.toISOString(),
 			};
 
 			// First, ensure the match time is saved
 			await updateMatchTime(gameId.id, minutes, seconds);
-			
+
 			// Then end the match
 			const res = await updateScores(updateData, gameId.id);
 
@@ -749,9 +831,19 @@ function ScorePage() {
 				res?.status === 200 ||
 				(res?.data && res?.data?.message === "Match Ends")
 			) {
-				sendScore(teamOneScore, teamTwoScore, "end", updateData.winner, matchStartTime, endTime, numberOfShuttlecock);
+				sendScore(
+					teamOneScore,
+					teamTwoScore,
+					"end",
+					updateData.winner,
+					matchStartTime,
+					endTime,
+					numberOfShuttlecock
+				);
 				// Show success message
-				toast.success(`${winner !== "DRAW" ? winner + " wins!" : "Match ended in a draw"}`);
+				toast.success(
+					`${winner !== "DRAW" ? winner + " wins!" : "Match ended in a draw"}`
+				);
 				// Force navigation after a short delay to ensure state updates
 				setTimeout(() => Navigate("/pastmatches"), 500);
 				return;
@@ -774,7 +866,15 @@ function ScorePage() {
 		if (res.status == 200) {
 			toast.success("Match ended by walkover");
 			Navigate("/pastmatches");
-			sendScore(teamOneScore, teamTwoScore, "end", "Walkover", matchStartTime, matchEndTime, numberOfShuttlecock);
+			sendScore(
+				teamOneScore,
+				teamTwoScore,
+				"end",
+				"Walkover",
+				matchStartTime,
+				matchEndTime,
+				numberOfShuttlecock
+			);
 		} else {
 			toast.error("Failed to end match by walkover");
 		}
@@ -804,14 +904,47 @@ function ScorePage() {
 		setMatchStartTime(null);
 		setMatchEndTime(null);
 		setIsPostInterval(false);
-		
+
 		if (timerIntervalRef.current) {
 			clearInterval(timerIntervalRef.current);
 		}
 	};
 
 	const handleMisconductUpdate = (newMisconduct) => {
-		setMisconducts((prev) => [...prev, newMisconduct]);
+		// Create a timestamp for the misconduct
+		const timestamp = new Date();
+
+		// Create the misconduct data object
+		const misconductData = {
+			matchId: gameId.id,
+			misconduct: {
+				player: newMisconduct.player,
+				type: newMisconduct.type,
+				timestamp: timestamp,
+			},
+		};
+
+		// Emit misconduct via socket
+		socket.emit("add_misconduct", misconductData);
+
+		// Add the new misconduct to the existing list
+		setMisconducts((prev) => {
+			// Create a copy of the previous misconducts
+			const updatedMisconducts = [...prev];
+
+			// Add the new misconduct with the timestamp
+			updatedMisconducts.push({
+				...newMisconduct,
+				timestamp: timestamp,
+			});
+
+			return updatedMisconducts;
+		});
+
+		// Show success message
+		toast.success(
+			`${newMisconduct.type} misconduct added for ${newMisconduct.player}`
+		);
 	};
 
 	const handlePlayClick = () => {
@@ -896,12 +1029,15 @@ function ScorePage() {
 				const minutes = Math.floor(matchTime / 60);
 				const seconds = matchTime % 60;
 				updateMatchTime(gameId.id, minutes, seconds)
-					.then(result => {
+					.then((result) => {
 						if (result) {
-							console.log("Match time saved successfully:", { minutes, seconds });
+							console.log("Match time saved successfully:", {
+								minutes,
+								seconds,
+							});
 						}
 					})
-					.catch(err => {
+					.catch((err) => {
 						console.error("Failed to save match time:", err);
 					});
 			}, 60000); // 60 seconds
@@ -944,40 +1080,48 @@ function ScorePage() {
 	const handleLoveAllPlay = () => {
 		setMatchStarted(true);
 		setPlay(true);
-		
+
 		// Show serve indicator at the start of the match
 		setShowServeIndicator(true);
-		
+
 		// Record the match start time
 		const startTime = new Date();
 		setMatchStartTime(startTime);
-		
+
 		// Initialize service based on the server information from the umpire page
 		if (matchData?.server) {
 			// Determine which team is serving based on the server player name
 			let initialServingTeam;
-			
+
 			// Check if server belongs to first team
-			if (matchData.server === matchData.playerOne || matchData.server === matchData.playerThree) {
+			if (
+				matchData.server === matchData.playerOne ||
+				matchData.server === matchData.playerThree
+			) {
 				initialServingTeam = 1;
-			} 
+			}
 			// Check if server belongs to second team
-			else if (matchData.server === matchData.playerTwo || matchData.server === matchData.playerFour) {
+			else if (
+				matchData.server === matchData.playerTwo ||
+				matchData.server === matchData.playerFour
+			) {
 				initialServingTeam = 2;
 			}
 			// Default to team 1 if server not found
 			else {
 				initialServingTeam = 1;
 			}
-			
+
 			setServingTeam(initialServingTeam);
 			setServiceCourt("right"); // Even score (0) serves from right court
 			setServerPlayer(matchData.server);
-			
+
 			// Set the receiver based on the server
 			if (!matchData?.playerThree && !matchData?.playerFour) {
 				// Singles - receiver is the player from the other team
-				setReceiverPlayer(initialServingTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
+				setReceiverPlayer(
+					initialServingTeam === 1 ? matchData?.playerTwo : matchData?.playerOne
+				);
 			} else {
 				// Doubles - receiver is determined by service court
 				if (initialServingTeam === 1) {
@@ -990,7 +1134,7 @@ function ScorePage() {
 			// Fallback to default behavior if no server information is available
 			setServingTeam(1);
 			setServiceCourt("right"); // Even score (0) serves from right court
-			
+
 			// Set the correct server based on singles or doubles
 			if (!matchData?.playerThree && !matchData?.playerFour) {
 				// Singles - server is the first player of team 1
@@ -1002,26 +1146,26 @@ function ScorePage() {
 				setReceiverPlayer(matchData?.playerTwo || "");
 			}
 		}
-		
+
 		// Reset the post-interval state
 		setIsPostInterval(false);
-		
+
 		// Ensure win animation is not showing when starting a match
 		setShowWinAnimation(false);
 		setWinningTeam(null);
-		
+
 		// Reset the initial score change flag
 		isInitialScoreChange.current = true;
-		
+
 		// Send initial score with service tracking data and start time
 		sendScore("0", "0", "start", null, startTime, null, numberOfShuttlecock);
-		
+
 		// Notify other clients that match has started
-		socket.emit("match_started", { 
+		socket.emit("match_started", {
 			matchId: gameId.id,
-			startTime: startTime.toISOString()
+			startTime: startTime.toISOString(),
 		});
-		
+
 		// Start the match timer
 		startMatchTimer();
 	};
@@ -1035,31 +1179,45 @@ function ScorePage() {
 		//    - Even score (0, 2, 4...) = serve from right court
 		//    - Odd score (1, 3, 5...) = serve from left court
 		// 4. In doubles, the server alternates between partners based on score
-		
+
 		// Check if the scoring team is the current serving team
 		if (scoringTeam === servingTeam) {
 			// If the serving team scores, they continue to serve but switch courts
 			// Determine the new score of the serving team
-			const newScore = scoringTeam === 1 ? 
-				parseInt(teamOneScore) + 1 : parseInt(teamTwoScore) + 1;
-			
+			const newScore =
+				scoringTeam === 1
+					? parseInt(teamOneScore) + 1
+					: parseInt(teamTwoScore) + 1;
+
 			// Determine service court based on the new score
 			// Even score = right court, odd score = left court
 			const newServiceCourt = newScore % 2 === 0 ? "right" : "left";
 			setServiceCourt(newServiceCourt);
-			
+
 			// In doubles, update the server if needed
 			if (matchData?.playerThree && matchData?.playerFour) {
 				if (scoringTeam === 1) {
 					// For team 1, even score = first player, odd score = second player
-					setServerPlayer(newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree);
+					setServerPlayer(
+						newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree
+					);
 					// Update receiver based on service court
-					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerTwo : matchData?.playerFour);
+					setReceiverPlayer(
+						newServiceCourt === "right"
+							? matchData?.playerTwo
+							: matchData?.playerFour
+					);
 				} else {
 					// For team 2, even score = first player, odd score = second player
-					setServerPlayer(newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour);
+					setServerPlayer(
+						newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour
+					);
 					// Update receiver based on service court
-					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerOne : matchData?.playerThree);
+					setReceiverPlayer(
+						newServiceCourt === "right"
+							? matchData?.playerOne
+							: matchData?.playerThree
+					);
 				}
 			} else {
 				// Singles - receiver is always the same player for each team
@@ -1073,50 +1231,68 @@ function ScorePage() {
 			// If the receiving team scores, the right to serve changes
 			// Update the serving team to the team that just scored
 			setServingTeam(scoringTeam);
-			
+
 			// Determine the new score of the serving team
-			const newScore = scoringTeam === 1 ? 
-				parseInt(teamOneScore) + 1 : parseInt(teamTwoScore) + 1;
-			
+			const newScore =
+				scoringTeam === 1
+					? parseInt(teamOneScore) + 1
+					: parseInt(teamTwoScore) + 1;
+
 			// Determine service court based on the new score
 			// Even score = right court, odd score = left court
 			const newServiceCourt = newScore % 2 === 0 ? "right" : "left";
 			setServiceCourt(newServiceCourt);
-			
+
 			// Update the server player
 			if (!matchData?.playerThree && !matchData?.playerFour) {
 				// Singles - server is always the same player for each team
-				setServerPlayer(scoringTeam === 1 ? matchData?.playerOne : matchData?.playerTwo);
+				setServerPlayer(
+					scoringTeam === 1 ? matchData?.playerOne : matchData?.playerTwo
+				);
 				// Update receiver
-				setReceiverPlayer(scoringTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
+				setReceiverPlayer(
+					scoringTeam === 1 ? matchData?.playerTwo : matchData?.playerOne
+				);
 			} else {
 				// Doubles - server alternates based on score
 				if (scoringTeam === 1) {
 					// For team 1, even score = first player, odd score = second player
-					setServerPlayer(newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree);
+					setServerPlayer(
+						newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree
+					);
 					// Update receiver based on service court
-					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerTwo : matchData?.playerFour);
+					setReceiverPlayer(
+						newServiceCourt === "right"
+							? matchData?.playerTwo
+							: matchData?.playerFour
+					);
 				} else {
 					// For team 2, even score = first player, odd score = second player
-					setServerPlayer(newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour);
+					setServerPlayer(
+						newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour
+					);
 					// Update receiver based on service court
-					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerOne : matchData?.playerThree);
+					setReceiverPlayer(
+						newServiceCourt === "right"
+							? matchData?.playerOne
+							: matchData?.playerThree
+					);
 				}
 			}
 		}
 	};
-	
+
 	// Function to manually change the server
 	const changeServer = (team, court) => {
 		// Update serving team
 		setServingTeam(team);
-		
+
 		// Update service court
 		setServiceCourt(court);
-		
+
 		// Get the relevant score for the serving team
 		const score = team === 1 ? parseInt(teamOneScore) : parseInt(teamTwoScore);
-		
+
 		// Update server player
 		updateServerPlayer(team, score);
 	};
@@ -1127,30 +1303,36 @@ function ScorePage() {
 			// Only update if the match has started
 			const team1Score = parseInt(teamOneScore);
 			const team2Score = parseInt(teamTwoScore);
-			
+
 			// Ensure service court is correct based on serving team's score
 			const servingTeamScore = servingTeam === 1 ? team1Score : team2Score;
 			const correctServiceCourt = servingTeamScore % 2 === 0 ? "right" : "left";
-			
+
 			if (serviceCourt !== correctServiceCourt) {
 				setServiceCourt(correctServiceCourt);
 			}
-			
+
 			// Ensure server player is correct
 			if (matchData?.playerThree && matchData?.playerFour) {
 				// Doubles - server alternates based on score
 				let correctServer = "";
 				if (servingTeam === 1) {
-					correctServer = servingTeamScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree;
+					correctServer =
+						servingTeamScore % 2 === 0
+							? matchData?.playerOne
+							: matchData?.playerThree;
 				} else {
-					correctServer = servingTeamScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour;
+					correctServer =
+						servingTeamScore % 2 === 0
+							? matchData?.playerTwo
+							: matchData?.playerFour;
 				}
-				
+
 				if (serverPlayer !== correctServer) {
 					setServerPlayer(correctServer);
 				}
 			}
-			
+
 			// Check for match point when scores change, but not on initial load
 			if (!isInitialScoreChange.current) {
 				if (!checkForWin()) {
@@ -1165,31 +1347,31 @@ function ScorePage() {
 	const resumeAfterInterval = () => {
 		// Show serve indicator after interval
 		setShowServeIndicator(true);
-		
+
 		// Clear the interval timer
 		if (intervalTimerRef.current) {
 			clearInterval(intervalTimerRef.current);
 			intervalTimerRef.current = null;
 		}
-		
+
 		// Hide the interval screen
 		setShowInterval(false);
-		
+
 		// Reset interval time for next use
 		setIntervalTimeLeft(120);
-		
+
 		// Set post-interval state
 		setIsPostInterval(true);
-		
+
 		// Resume the match timer
 		if (!isMatchTimerRunning) {
 			startMatchTimer();
 		}
-		
+
 		// Announce the current score
 		const team1Score = parseInt(teamOneScore);
 		const team2Score = parseInt(teamTwoScore);
-		
+
 		// Determine which team is leading
 		let leadingTeam = null;
 		if (team1Score > team2Score) {
@@ -1197,7 +1379,7 @@ function ScorePage() {
 		} else if (team2Score > team1Score) {
 			leadingTeam = matchData?.secondTeamName;
 		}
-		
+
 		// Construct the announcement message
 		let announcement = "";
 		if (leadingTeam) {
@@ -1205,7 +1387,7 @@ function ScorePage() {
 		} else {
 			announcement = `${teamOneScore}-all`;
 		}
-		
+
 		// Show toast with the announcement
 		toast.info(announcement, {
 			position: "top-center",
@@ -1217,7 +1399,9 @@ function ScorePage() {
 	const formatIntervalTime = (seconds) => {
 		const mins = Math.floor(seconds / 60);
 		const secs = seconds % 60;
-		return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+		return `${mins.toString().padStart(2, "0")}:${secs
+			.toString()
+			.padStart(2, "0")}`;
 	};
 
 	// Clean up interval timer on unmount
@@ -1240,14 +1424,14 @@ function ScorePage() {
 	useEffect(() => {
 		// Create a variable to store the timeout ID
 		let winAnimationTimeout;
-		
+
 		// If win animation is shown, set up the cleanup
 		if (showWinAnimation) {
 			winAnimationTimeout = setTimeout(() => {
 				setShowWinAnimation(false);
 			}, 2000); // Backup timeout in case the main one fails
 		}
-		
+
 		// Cleanup function to clear the timeout when component unmounts or animation state changes
 		return () => {
 			if (winAnimationTimeout) {
@@ -1261,15 +1445,31 @@ function ScorePage() {
 		const newCount = (parseInt(numberOfShuttlecock) + 1).toString();
 		setNumberOfShuttlecock(newCount);
 		// Update in database
-		sendScore(teamOneScore, teamTwoScore, "start", null, matchStartTime, matchEndTime, newCount);
+		sendScore(
+			teamOneScore,
+			teamTwoScore,
+			"start",
+			null,
+			matchStartTime,
+			matchEndTime,
+			newCount
+		);
 	};
-	
+
 	const decrementShuttlecock = () => {
 		if (parseInt(numberOfShuttlecock) > 1) {
 			const newCount = (parseInt(numberOfShuttlecock) - 1).toString();
 			setNumberOfShuttlecock(newCount);
 			// Update in database
-			sendScore(teamOneScore, teamTwoScore, "start", null, matchStartTime, matchEndTime, newCount);
+			sendScore(
+				teamOneScore,
+				teamTwoScore,
+				"start",
+				null,
+				matchStartTime,
+				matchEndTime,
+				newCount
+			);
 		}
 	};
 
@@ -1282,7 +1482,7 @@ function ScorePage() {
 				setIntervalTeam(data.team);
 				setShowInterval(true);
 				setIntervalTimeLeft(data.timeLeft || 120);
-				
+
 				// Pause the match timer if it's running
 				if (isMatchTimerRunning) {
 					clearInterval(timerIntervalRef.current);
@@ -1290,48 +1490,55 @@ function ScorePage() {
 				}
 			}
 		});
-		
+
 		// Listen for interval end events
 		socket.on("interval_end", (data) => {
 			if (data.matchId === gameId.id) {
 				// Another client has ended an interval
 				setShowInterval(false);
 				setIntervalTeam(null);
-				
+
 				// After an interval, service stays with the same player/team
 				// But we need to ensure the service court is correct based on the score
-				const servingTeamScore = servingTeam === 1 ? 
-					parseInt(teamOneScore) : parseInt(teamTwoScore);
-				
+				const servingTeamScore =
+					servingTeam === 1 ? parseInt(teamOneScore) : parseInt(teamTwoScore);
+
 				// Determine service court based on the serving team's score
 				// Even score = right court, odd score = left court
-				const correctServiceCourt = servingTeamScore % 2 === 0 ? "right" : "left";
+				const correctServiceCourt =
+					servingTeamScore % 2 === 0 ? "right" : "left";
 				setServiceCourt(correctServiceCourt);
-				
+
 				// Update the server player if needed (for doubles matches)
 				if (matchData?.playerThree && matchData?.playerFour) {
 					let correctServer = "";
 					if (servingTeam === 1) {
-						correctServer = servingTeamScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree;
+						correctServer =
+							servingTeamScore % 2 === 0
+								? matchData?.playerOne
+								: matchData?.playerThree;
 					} else {
-						correctServer = servingTeamScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour;
+						correctServer =
+							servingTeamScore % 2 === 0
+								? matchData?.playerTwo
+								: matchData?.playerFour;
 					}
-					
+
 					if (serverPlayer !== correctServer) {
 						setServerPlayer(correctServer);
 					}
 				}
-				
+
 				// Set the post-interval state to true
 				setIsPostInterval(true);
-				
+
 				// Resume the match timer if it's not running
 				if (!isMatchTimerRunning) {
 					startMatchTimer();
 				}
 			}
 		});
-		
+
 		return () => {
 			socket.off("interval_start");
 			socket.off("interval_end");
@@ -1413,142 +1620,226 @@ function ScorePage() {
 
 			{/* misconduct Box */}
 			{misconductBox && (
-				<div className="bg-white absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 z-50 rounded-md flex flex-col items-end gap-4">
-					{step === 1 && (
-						<div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 items-center gap-2">
-							<div
-								id="w"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("W")}
-							>
-								<h1 className="font-bold text-3xl text-yellow-700 bg-yellow-400 rounded-md w-16 m-auto">
-									W
-								</h1>
-								<p className="font-semibold">Warning</p>
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+					<div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+						{step === 1 && (
+							<div className="p-6">
+								<h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
+									Select Misconduct Type
+								</h2>
+								<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-yellow-50 hover:bg-yellow-100 rounded-lg border border-yellow-200 transition-all"
+										onClick={() => handleMisconduct("W")}
+									>
+										<h1 className="font-bold text-3xl text-yellow-700 bg-yellow-400 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											W
+										</h1>
+										<p className="font-semibold mt-2">Warning</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-all"
+										onClick={() => handleMisconduct("F")}
+									>
+										<h1 className="font-bold text-3xl text-white bg-red-500 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											F
+										</h1>
+										<p className="font-semibold mt-2">Fault</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-all"
+										onClick={() => handleMisconduct("R")}
+									>
+										<h1 className="font-bold text-3xl text-blue-700 bg-blue-200 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											R
+										</h1>
+										<p className="font-semibold mt-2 leading-tight">
+											Referee
+											<br />
+											Called
+										</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-all"
+										onClick={() => handleMisconduct("S")}
+									>
+										<h1 className="font-bold text-3xl text-green-700 bg-green-200 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											S
+										</h1>
+										<p className="font-semibold mt-2">Suspension</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-all"
+										onClick={() => handleMisconduct("O")}
+									>
+										<h1 className="font-bold text-3xl text-purple-700 bg-purple-200 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											O
+										</h1>
+										<p className="font-semibold mt-2">Overrule</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 transition-all"
+										onClick={() => handleMisconduct("I")}
+									>
+										<h1 className="font-bold text-3xl text-orange-700 bg-orange-200 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											I
+										</h1>
+										<p className="font-semibold mt-2">Injury</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-all"
+										onClick={() => handleMisconduct("DIS")}
+									>
+										<h1 className="font-bold text-white bg-slate-700 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											DIS
+										</h1>
+										<p className="font-semibold mt-2">Disqualified</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-all"
+										onClick={() => handleMisconduct("RET")}
+									>
+										<h1 className="font-bold text-blue-700 bg-blue-200 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											RET
+										</h1>
+										<p className="font-semibold mt-2">Retired</p>
+									</div>
+									<div
+										className="text-center font-inter p-3 cursor-pointer bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-all"
+										onClick={() => handleMisconduct("C")}
+									>
+										<h1 className="font-bold text-3xl text-green-700 bg-green-200 rounded-md w-16 h-16 m-auto flex items-center justify-center">
+											C
+										</h1>
+										<p className="font-semibold mt-2 leading-tight">
+											Service
+											<br />
+											Court Error
+										</p>
+									</div>
+								</div>
+								<div className="mt-6 flex justify-end">
+									<button
+										className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-md text-gray-800 font-medium transition-colors"
+										onClick={() => setMisconductBox(false)}
+									>
+										Cancel
+									</button>
+								</div>
 							</div>
-							<div
-								id="f"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("F")}
-							>
-								<h1 className="font-bold text-3xl text-red-700 bg-red-500 rounded-md w-16 m-auto">
-									F
-								</h1>
-								<p className="font-semibold">Fault</p>
-							</div>
-							<div
-								id="r"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("R")}
-							>
-								<h1 className="font-bold text-3xl text-blue-950 rounded-md">
-									R
-								</h1>
-								<p className="font-semibold leading-4">
-									Referee <br /> called{" "}
-								</p>
-							</div>
-							<div
-								id="s"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("S")}
-							>
-								<h1 className="font-bold text-3xl text-blue-950 rounded-md">
-									S
-								</h1>
-								<p className="font-semibold">Suspension</p>
-							</div>
-							<div
-								id="o"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("O")}
-							>
-								<h1 className="font-bold text-3xl text-blue-950 rounded-md">
-									O
-								</h1>
-								<p className="font-semibold">Overrule</p>
-							</div>
-							<div
-								id="i"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("I")}
-							>
-								<h1 className="font-bold text-3xl font-mono text-blue-950 rounded-md">
-									I
-								</h1>
-								<p className="font-semibold">Injury</p>
-							</div>
-							<div
-								id="dec"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("DIS")}
-							>
-								<h1 className="font-bold text-slate-400 bg-slate-700 rounded-sm w-16 h-10 m-auto flex items-center justify-center">
-									DEC
-								</h1>
-								<p className="font-semibold">Disqualified</p>
-							</div>
-							<div
-								id="ret"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("RET")}
-							>
-								<h1 className="font-bold text-3xl text-blue-950 rounded-md">
-									RET
-								</h1>
-								<p className="font-semibold">Retired</p>
-							</div>
-							<div
-								id="c"
-								className="text-center font-inter px-4 py-2 cursor-pointer"
-								onClick={() => handleMisconduct("C")}
-							>
-								<h1 className="font-bold text-3xl text-blue-950 rounded-md">
-									C
-								</h1>
-								<p className="font-semibold leading-4">
-									Service <br /> Court Error
-								</p>
-							</div>
-						</div>
-					)}
-					{misconductBox && step === 2 && (
-						<div className="bg-white w-full h-full top-0 absolute ">
-							<div className="flex justify-center flex-col gap-2 align-middle items-center p-2">
-								<h1>Choose player</h1>
-								<select
-									name="player"
-									id=""
-									className="w-100 h-100 bg-slate-200 p-2"
-									onChange={handlePlayerSelect}
-								>
-									<option value="">Select Player</option>
-									<option value={matchData.playerOne}>
-										{matchData.playerOne}
-									</option>
-									<option value={matchData.playerTwo}>
-										{matchData.playerTwo}
-									</option>
+						)}
+
+						{step === 2 && (
+							<div className="p-6">
+								<h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
+									Select Player for{" "}
+									{misconduct === "W"
+										? "Warning"
+										: misconduct === "F"
+										? "Fault"
+										: misconduct === "R"
+										? "Referee Called"
+										: misconduct === "S"
+										? "Suspension"
+										: misconduct === "O"
+										? "Overrule"
+										: misconduct === "I"
+										? "Injury"
+										: misconduct === "DIS"
+										? "Disqualified"
+										: misconduct === "RET"
+										? "Retired"
+										: misconduct === "C"
+										? "Service Court Error"
+										: "Misconduct"}
+								</h2>
+
+								<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+									<button
+										onClick={() =>
+											handleMisconductSelect(misconduct, matchData.playerOne)
+										}
+										className="flex items-center justify-center gap-3 bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 p-4 rounded-lg border border-blue-200 transition-all"
+									>
+										<div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-lg">
+											1
+										</div>
+										<span className="font-medium text-gray-800 text-lg">
+											{matchData.playerOne}
+										</span>
+									</button>
+
+									<button
+										onClick={() =>
+											handleMisconductSelect(misconduct, matchData.playerTwo)
+										}
+										className="flex items-center justify-center gap-3 bg-gradient-to-r from-red-100 to-red-50 hover:from-red-200 hover:to-red-100 p-4 rounded-lg border border-red-200 transition-all"
+									>
+										<div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-white font-bold text-lg">
+											2
+										</div>
+										<span className="font-medium text-gray-800 text-lg">
+											{matchData.playerTwo}
+										</span>
+									</button>
+
 									{matchData.playerThree && (
-										<option value={matchData.playerThree}>
-											{matchData.playerThree}
-										</option>
+										<button
+											onClick={() =>
+												handleMisconductSelect(
+													misconduct,
+													matchData.playerThree
+												)
+											}
+											className="flex items-center justify-center gap-3 bg-gradient-to-r from-green-100 to-green-50 hover:from-green-200 hover:to-green-100 p-4 rounded-lg border border-green-200 transition-all"
+										>
+											<div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-lg">
+												3
+											</div>
+											<span className="font-medium text-gray-800 text-lg">
+												{matchData.playerThree}
+											</span>
+										</button>
 									)}
+
 									{matchData.playerFour && (
-										<option value={matchData.playerFour}>
-											{matchData.playerFour}
-										</option>
+										<button
+											onClick={() =>
+												handleMisconductSelect(misconduct, matchData.playerFour)
+											}
+											className="flex items-center justify-center gap-3 bg-gradient-to-r from-purple-100 to-purple-50 hover:from-purple-200 hover:to-purple-100 p-4 rounded-lg border border-purple-200 transition-all"
+										>
+											<div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white font-bold text-lg">
+												4
+											</div>
+											<span className="font-medium text-gray-800 text-lg">
+												{matchData.playerFour}
+											</span>
+										</button>
 									)}
-								</select>
+								</div>
+
+								<div className="mt-6 flex justify-between">
+									<button
+										className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-md text-gray-800 font-medium transition-colors"
+										onClick={() => {
+											setStep(1);
+											setMisconduct("");
+										}}
+									>
+										Back
+									</button>
+
+									<button
+										className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-md text-gray-800 font-medium transition-colors"
+										onClick={() => setMisconductBox(false)}
+									>
+										Cancel
+									</button>
+								</div>
 							</div>
-						</div>
-					)}
-					<button
-						className="border border-black px-4 py-2 rounded-md text-xl font-inter font-semibold"
-						onClick={() => setMisconductBox(false)}
-					>
-						Cancel
-					</button>
+						)}
+					</div>
 				</div>
 			)}
 
@@ -1580,13 +1871,18 @@ function ScorePage() {
 				<>
 					{/* Blurred background overlay */}
 					<div className="fixed inset-0 bg-black/30 backdrop-blur-md z-40"></div>
-					
+
 					<div className="bg-white text-3xl font-inter absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-6 rounded-lg shadow-lg z-50 max-w-md w-full">
-						<h1 className="text-2xl lg:text-3xl font-bold text-center mb-4">INTERVAL</h1>
+						<h1 className="text-2xl lg:text-3xl font-bold text-center mb-4">
+							INTERVAL
+						</h1>
 						<p className="text-lg text-center mb-4">
-							{intervalTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName} has reached the interval point
+							{intervalTeam === 1
+								? matchData?.firstTeamName
+								: matchData?.secondTeamName}{" "}
+							has reached the interval point
 						</p>
-						
+
 						{/* Interval timer */}
 						<div className="flex flex-col items-center justify-center mb-6">
 							<div className="text-4xl font-mono font-bold bg-gray-100 px-6 py-3 rounded-lg">
@@ -1594,7 +1890,7 @@ function ScorePage() {
 							</div>
 							<p className="text-sm text-gray-500 mt-2">Remaining time</p>
 						</div>
-						
+
 						<div className="flex justify-center">
 							<button
 								className="border border-blue-500 bg-blue-500 hover:bg-blue-600 text-white text-xl font-inter px-6 py-3 rounded-md font-semibold"
@@ -1612,7 +1908,9 @@ function ScorePage() {
 				<div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 z-40 animate-pulse">
 					<div className="bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg text-center">
 						<h2 className="text-xl font-bold">
-							{matchPoint === 1 ? matchData?.firstTeamName : matchData?.secondTeamName} 
+							{matchPoint === 1
+								? matchData?.firstTeamName
+								: matchData?.secondTeamName}
 							{" MATCH POINT"}
 						</h2>
 					</div>
@@ -1628,10 +1926,14 @@ function ScorePage() {
 								<div className="inline-block text-5xl animate-bounce">🏆</div>
 							</div>
 							<h2 className="text-3xl font-bold text-blue-600 mb-2">
-								{winningTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName} wins!
+								{winningTeam === 1
+									? matchData?.firstTeamName
+									: matchData?.secondTeamName}{" "}
+								wins!
 							</h2>
 							<div className="text-2xl font-semibold bg-gray-100 rounded-full py-2 px-4 inline-block mb-2">
-								{winningTeam === 1 ? teamOneScore : teamTwoScore} - {winningTeam === 1 ? teamTwoScore : teamOneScore}
+								{winningTeam === 1 ? teamOneScore : teamTwoScore} -{" "}
+								{winningTeam === 1 ? teamTwoScore : teamOneScore}
 							</div>
 							<div className="mt-3 text-gray-600 text-sm">
 								Match ending in a moment...
@@ -1647,9 +1949,7 @@ function ScorePage() {
 					{matchData?.typeOfMatch}
 				</h1>
 				<div className="sm:flex justify-center items-center">
-					<div 
-						className="text-3xl text-white font-bold rounded-3xl py-3 px-5 bg-[rgb(124,182,203)] m-4 flex justify-center items-center shadow-lg gap-2 relative group"
-					>
+					<div className="text-3xl text-white font-bold rounded-3xl py-3 px-5 bg-[rgb(124,182,203)] m-4 flex justify-center items-center shadow-lg gap-2 relative group">
 						<div className="flex items-center gap-2">
 							<button
 								className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
@@ -1659,16 +1959,22 @@ function ScorePage() {
 									}
 								}}
 								disabled={!matchStarted || parseInt(numberOfShuttlecock) <= 1}
-								title={matchStarted ? "Remove shuttlecock" : "Match not started"}
+								title={
+									matchStarted ? "Remove shuttlecock" : "Match not started"
+								}
 							>
 								<span className="text-xl font-bold">-</span>
 							</button>
-							
-							<img src=".././mdi_badminton.png" alt="shuttle cock icon" className="h-8" />
+
+							<img
+								src=".././mdi_badminton.png"
+								alt="shuttle cock icon"
+								className="h-8"
+							/>
 							<span className="text-xl font-mono bg-white/20 px-2 py-1 rounded-md min-w-[2rem] text-center">
 								{numberOfShuttlecock}
 							</span>
-							
+
 							<button
 								className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
 								onClick={() => {
@@ -1690,7 +1996,9 @@ function ScorePage() {
 								: "hover:bg-[#5a9cb5]"
 						}`}
 						onClick={() => handleButtonClick("undo")}
-						disabled={parseInt(teamOneScore) === 0 && parseInt(teamTwoScore) === 0}
+						disabled={
+							parseInt(teamOneScore) === 0 && parseInt(teamTwoScore) === 0
+						}
 						title="Undo last point"
 					>
 						<svg
@@ -1705,17 +2013,24 @@ function ScorePage() {
 						<span className="hidden sm:inline">Undo</span>
 					</button>
 					<button
-						className="text-3xl text-white font-bold rounded-3xl px-5 py-3 bg-[#7cb6cb] m-4 w-48 flex justify-center items-center shadow-lg"
-						onClick={() => setMisconductBox(!misconductBox)}
+						className="text-xl text-white font-bold rounded-3xl px-5 py-3 bg-[#7cb6cb] hover:bg-[#5a9cb5] m-4 flex justify-center items-center shadow-lg gap-2 transition-all"
+						onClick={() => {
+							setMisconductBox(!misconductBox);
+							setStep(1); // Reset to step 1 when opening the misconduct box
+							setMisconduct(""); // Reset the selected misconduct
+							setSelectedPlayer(""); // Reset the selected player
+						}}
+						title="Record misconduct"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 -960 960 960"
-							className="w-12 h-12"
+							className="w-10 h-10"
 							fill="#FFFFFF"
 						>
 							<path d="M480-120q-33 0-56.5-23.5T400-200q0-33 23.5-56.5T480-280q33 0 56.5 23.5T560-200q0 33-23.5 56.5T480-120Zm-80-240v-480h160v480H400Z" />
 						</svg>
+						<span className="hidden sm:inline">Misconduct</span>
 					</button>
 					<div>
 						{matchStarted ? (
@@ -1747,7 +2062,7 @@ function ScorePage() {
 
 				{/* Timer display */}
 				{matchStarted && (
-					<div className="flex justify-center my-6">
+					<div className="absolute top-4 right-6">
 						<MatchTimer
 							isRunning={isMatchTimerRunning}
 							onPauseResume={handleTimerPauseResume}
@@ -1755,9 +2070,8 @@ function ScorePage() {
 						/>
 					</div>
 				)}
-
 				{/* Remove ServiceTrackingUI component */}
-				
+
 				{/* Main Section */}
 				<div className="w-[85%] lg:w-[60%] m-auto h-auto bg-white pb-4 rounded-t-3xl">
 					{/* Score */}
@@ -1774,7 +2088,7 @@ function ScorePage() {
 								: `${teamOneScore}`}
 						</span>
 					</div>
-					
+
 					{/* Serve Indicator */}
 					{showServeIndicator && matchStarted && (
 						<div className="flex justify-center mb-2">
@@ -1789,7 +2103,7 @@ function ScorePage() {
 							</div>
 						</div>
 					)}
-					
+
 					{/* Court */}
 					<div className="">
 						<div className="h-[10rem] sm:h-[14rem] md:h-[20rem] lg:h-[23rem] xl:h-[25rem] 2xl:h-[30rem] bg-green-600 flex shadow-lg relative">
@@ -1797,47 +2111,60 @@ function ScorePage() {
 							<div className="absolute inset-0 flex">
 								{/* Vertical center line */}
 								<div className="w-[2px] h-full bg-white mx-auto"></div>
-								
+
 								{/* Horizontal lines */}
 								<div className="absolute top-1/4 w-full h-[2px] bg-white"></div>
 								<div className="absolute top-3/4 w-full h-[2px] bg-white"></div>
-								
+
 								{/* Service court lines */}
 								<div className="absolute left-1/4 top-0 w-[2px] h-full bg-white"></div>
 								<div className="absolute left-3/4 top-0 w-[2px] h-full bg-white"></div>
 							</div>
-							
+
 							{/* Score buttons for individual players on left side */}
 							{matchData?.playerThree && matchData?.playerThree !== "" ? (
 								<div className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] flex flex-col gap-4">
 									<button
 										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
 										onClick={() => {
-											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerOne : matchData?.playerTwo;
+											const player =
+												matchData?.firstTeamName === matchData?.receiver
+													? matchData?.playerOne
+													: matchData?.playerTwo;
 											handleButtonClick(`left`, player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerOne : matchData?.playerTwo} Score
+										{matchData?.firstTeamName === matchData?.receiver
+											? matchData?.playerOne
+											: matchData?.playerTwo}{" "}
+										Score
 									</button>
 									<button
 										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
 										onClick={() => {
-											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerThree : matchData?.playerFour;
+											const player =
+												matchData?.firstTeamName === matchData?.receiver
+													? matchData?.playerThree
+													: matchData?.playerFour;
 											handleButtonClick(`left`, player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerThree : matchData?.playerFour} Score
+										{matchData?.firstTeamName === matchData?.receiver
+											? matchData?.playerThree
+											: matchData?.playerFour}{" "}
+										Score
 									</button>
 								</div>
 							) : (
 								<button
 									className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
 									onClick={() => {
-										const player = matchData?.firstTeamName === matchData?.receiver 
-											? matchData?.playerOne 
-											: matchData?.playerTwo;
+										const player =
+											matchData?.firstTeamName === matchData?.receiver
+												? matchData?.playerOne
+												: matchData?.playerTwo;
 										handleButtonClick("left", player);
 									}}
 									disabled={!matchStarted}
@@ -1845,7 +2172,7 @@ function ScorePage() {
 									Score
 								</button>
 							)}
-							
+
 							{/* Left side of the court */}
 							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
 								{matchData?.firstTeamName === matchData?.receiver ? (
@@ -1894,7 +2221,7 @@ function ScorePage() {
 									</>
 								)}
 							</div>
-							
+
 							{/* Right side of the court */}
 							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
 								{matchData?.firstTeamName === matchData?.receiver ? (
@@ -1943,38 +2270,51 @@ function ScorePage() {
 									</>
 								)}
 							</div>
-							
+
 							{/* Score buttons for individual players on right side */}
 							{matchData?.playerFour && matchData?.playerFour !== "" ? (
 								<div className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] flex flex-col gap-4">
 									<button
 										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
 										onClick={() => {
-											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerTwo : matchData?.playerOne;
+											const player =
+												matchData?.firstTeamName === matchData?.receiver
+													? matchData?.playerTwo
+													: matchData?.playerOne;
 											handleButtonClick("right", player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerTwo : matchData?.playerOne} Score
+										{matchData?.firstTeamName === matchData?.receiver
+											? matchData?.playerTwo
+											: matchData?.playerOne}{" "}
+										Score
 									</button>
 									<button
 										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
 										onClick={() => {
-											const player = matchData?.firstTeamName === matchData?.receiver ? matchData?.playerFour : matchData?.playerThree;
+											const player =
+												matchData?.firstTeamName === matchData?.receiver
+													? matchData?.playerFour
+													: matchData?.playerThree;
 											handleButtonClick("right", player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver ? matchData?.playerFour : matchData?.playerThree} Score
+										{matchData?.firstTeamName === matchData?.receiver
+											? matchData?.playerFour
+											: matchData?.playerThree}{" "}
+										Score
 									</button>
 								</div>
 							) : (
 								<button
 									className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
 									onClick={() => {
-										const player = matchData?.firstTeamName === matchData?.receiver 
-											? matchData?.playerTwo 
-											: matchData?.playerOne;
+										const player =
+											matchData?.firstTeamName === matchData?.receiver
+												? matchData?.playerTwo
+												: matchData?.playerOne;
 										handleButtonClick("right", player);
 									}}
 									disabled={!matchStarted}
@@ -2012,4 +2352,3 @@ function ScorePage() {
 }
 
 export default ScorePage;
-
