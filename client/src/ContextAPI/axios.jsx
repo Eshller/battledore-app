@@ -213,12 +213,14 @@ export const BackendProvider = ({ children }) => {
 				`/createMatch/${id}`,
 				reqDetail
 			);
-			toast.success(response.data?.message);
+			// Don't show toast here to avoid duplicate toasts
 			setNumberofMatches(numberofMatches + 1);
 			return response;
 		} catch (error) {
 			console.log(error.message);
+			// Keep the error toast here
 			toast.error(error.response?.data?.message);
+			return { status: 'error', error };
 		} finally {
 			setIsLoading(false);
 		}

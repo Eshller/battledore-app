@@ -119,15 +119,30 @@ function MatchForm({ event }) {
 			return;
 		}
 
+		// Check if date is valid
+		const formattedDate = verifyDate();
+		if (!formattedDate) {
+			// verifyDate already shows an error toast
+			return;
+		}
+
 		try {
 			const newDetails = {
 				...matchDetail,
-				matchDate: verifyDate(),
+				matchDate: formattedDate,
 			};
 			const response = await addMatch(event?._id, newDetails);
 
-			if (response.status == 201) {
-				socket.emit("new_match_created", response.match._id);
+			// Check if there was an error
+			if (response.status === 'error') {
+				// Error toast is already shown in the service
+				return;
+			}
+
+			if (response.status === 201) {
+				// Show success toast only here
+				toast.success(response.data?.message || "Match created successfully");
+				socket.emit("new_match_created", response.data.match._id);
 
 				setMatchDetail({
 					typeOfMatch: "",
@@ -146,6 +161,9 @@ function MatchForm({ event }) {
 				// Handle specific error cases
 				if (response.status === 500) {
 					toast.error("Server error. Please try again later.");
+				} else {
+					// Show generic error for other status codes
+					toast.error(response.data?.message || "Failed to create match");
 				}
 			}
 		} catch (error) {
