@@ -39,10 +39,21 @@ const userSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    isPlayer: {
+      type: Boolean,
+      default: false,
+    },
     matches: {
       type: [Schema.Types.ObjectId],
       ref: "Match",
     },
+    playerDetails: {
+      name: String,
+      phone: String,
+      age: Number,
+      gender: String,
+      address: String
+    }
   },
   {
     timestamps: true,

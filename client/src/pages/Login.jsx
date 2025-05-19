@@ -22,10 +22,9 @@ function Login() {
 	};
 
 	const handleSubmit = async (e) => {
-		setIsLoading(true);
-
+		e.preventDefault();
+		
 		try {
-			e.preventDefault();
 			await login(loginData);
 			setLoginData({
 				email: "",
@@ -34,24 +33,8 @@ function Login() {
 		} catch (error) {
 			console.log(error.message);
 			// toast.error(error.response?.data?.message);
-		} finally {
-			setIsLoading(false);
 		}
 	};
-
-	const handleKeyDown = (e) => {
-		if (e.key === "Enter") {
-			handleSubmit(e);
-		}
-	};
-
-	useEffect(() => {
-		// Add event listener for enter key
-		document.addEventListener("keydown", handleKeyDown);
-		return () => {
-			document.removeEventListener("keydown", handleKeyDown);
-		};
-	}, [loginData]); // Add loginData as dependency to ensure latest data is used
 
 	useEffect(() => {
 		if (token) {
@@ -92,7 +75,7 @@ function Login() {
 						</div>
 
 						{/* Form fields */}
-						<div className="flex flex-col space-y-6">
+						<form onSubmit={handleSubmit} className="flex flex-col space-y-6">
 							<div className="group border-b-2 border-white/50 hover:border-white focus-within:border-white transition-colors pb-2">
 								<div className="flex items-center text-white">
 									<svg
@@ -110,6 +93,7 @@ function Login() {
 										value={loginData.email}
 										onChange={handleLogin}
 										placeholder="Email"
+										autoComplete="username email"
 										className="w-full bg-transparent outline-none px-4 text-white placeholder-white/70"
 									/>
 								</div>
@@ -133,9 +117,13 @@ function Login() {
 											value={loginData.password}
 											onChange={handleLogin}
 											placeholder="Password"
+											autoComplete="current-password"
 											className="bg-transparent outline-none border-none px-6 placeholder:text-white w-full"
 										/>
-										<button onClick={() => setShowPassword(!showPassword)}>
+										<button 
+											type="button" 
+											onClick={() => setShowPassword(!showPassword)}
+										>
 											{showPassword ? (
 												<svg
 													xmlns="http://www.w3.org/2000/svg"
@@ -162,6 +150,7 @@ function Login() {
 								</div>
 								<div className="text-right">
 									<button
+										type="button"
 										onClick={() => Navigate("/forgotpassword")}
 										className="text-white/70 hover:text-white text-sm transition-colors border-b border-transparent hover:border-white"
 									>
@@ -169,25 +158,25 @@ function Login() {
 									</button>
 								</div>
 							</div>
-						</div>
-
-						{/* Login button */}
-						<button
-							onClick={handleSubmit}
-							className="w-full bg-white text-[#5ea0b8] font-semibold py-3 rounded-2xl text-lg
-                transition-all duration-300 hover:bg-[#B1D848] hover:text-white disabled:opacity-70
-                disabled:cursor-not-allowed transform hover:scale-[1.02]"
-							disabled={isLoading}
-						>
-							{isLoading ? (
-								<div className="flex items-center justify-center gap-2">
-									<span>Logging in...</span>
-									<LoadingSpinner />
-								</div>
-							) : (
-								"Log In"
-							)}
-						</button>
+						
+							{/* Login button */}
+							<button
+								type="submit"
+								className="w-full bg-white text-[#5ea0b8] font-semibold py-3 rounded-2xl text-lg
+									transition-all duration-300 hover:bg-[#B1D848] hover:text-white disabled:opacity-70
+									disabled:cursor-not-allowed transform hover:scale-[1.02]"
+								disabled={isLoading}
+							>
+								{isLoading ? (
+									<div className="flex items-center justify-center gap-2">
+										<span>Logging in...</span>
+										<LoadingSpinner />
+									</div>
+								) : (
+									"Log In"
+								)}
+							</button>
+						</form>
 					</div>
 				</div>
 			</div>

@@ -93,11 +93,36 @@ export const BackendProvider = ({ children }) => {
 	const getAllUsers = async () => {
 		try {
 			setIsLoading(true);
-			const response = await axiosInstance.get("/players");
-			setPlayerList(response.data.users);
-			setNumberofUsers(response.data?.users?.length);
+			// Get regular users (accounts)
+			const accountsResponse = await axiosInstance.get("/users");
+			
+			// Get players
+			const playersResponse = await axiosInstance.get("/players");
+			
+			// Combine both responses, but keep track of which are players
+			const allUsers = [
+				...accountsResponse.data.users,
+				...playersResponse.data.users
+			];
+			
+			setPlayerList(allUsers);
+			setNumberofUsers(allUsers.length);
 		} catch (error) {
 			console.log(error.message);
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	// New function to get only players
+	const getPlayers = async () => {
+		try {
+			setIsLoading(true);
+			const response = await axiosInstance.get("/players");
+			return response.data.users;
+		} catch (error) {
+			console.log("Unable to fetch players", error.message);
+			return [];
 		} finally {
 			setIsLoading(false);
 		}
@@ -107,11 +132,28 @@ export const BackendProvider = ({ children }) => {
 		try {
 			setIsLoading(true);
 			const response = await axiosInstance.delete(`/users/delete/${userId}`);
-			setNumberofUsers(numberOfEvents - 1);
+			setNumberofUsers(numberOfUsers - 1);
 			toast.success(response.data?.message);
+			return response.data;
 		} catch (error) {
 			console.log(error.message);
 			toast.error(error.response?.data?.message);
+			throw error;
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	const importPlayersFromCSV = async (playersData) => {
+		try {
+			setIsLoading(true);
+			const response = await axiosInstance.post('/players/import', { players: playersData });
+			setNumberofUsers(numberOfUsers + response.data.results.success);
+			return response.data;
+		} catch (error) {
+			console.log(error.message);
+			toast.error(error.response?.data?.message);
+			return null;
 		} finally {
 			setIsLoading(false);
 		}
@@ -415,33 +457,45 @@ export const BackendProvider = ({ children }) => {
 		}
 	};
 
+	// New function to get only accounts (non-players)
+	const getAccounts = async () => {
+		try {
+			setIsLoading(true);
+			const response = await axiosInstance.get("/users");
+			return response.data.users;
+		} catch (error) {
+			console.log("Unable to fetch accounts", error.message);
+			return [];
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
 	return (
 		<BackendContext.Provider
 			value={{
-				// Variables
-				playerList,
 				token,
+				playerList,
 				numberOfUsers,
 				eventList,
-				myData,
 				numberOfEvents,
+				myData,
 				matchData,
 				numberofMatches,
-				// Functions
+				isLoading,
 				signup,
 				login,
 				logOut,
-				getAllUsers,
-				getYourData,
-				updateMyData,
-				removeUser,
 				forgotPassword,
 				createNewPassword,
+				getAllUsers,
+				removeUser,
+				getYourData,
+				updateMyData,
 				setEvent,
 				getEvents,
-				updateEvent,
-				setNumberofEvents,
 				removeEvent,
+				updateEvent,
 				addMatch,
 				startMatch,
 				getMatchData,
@@ -450,10 +504,11 @@ export const BackendProvider = ({ children }) => {
 				removeMatch,
 				saveMisconduct,
 				getMisconducts,
-				isLoading,
-				setIsLoading,
 				createMatch,
 				updateMatchTime,
+				importPlayersFromCSV,
+				getPlayers,
+				getAccounts,
 			}}
 		>
 			{children}
@@ -462,5 +517,9 @@ export const BackendProvider = ({ children }) => {
 };
 
 export const useService = () => {
-	return useContext(BackendContext);
+	const context = useContext(BackendContext);
+	if (!context) {
+		throw new Error("useService must be used within BackendProvider");
+	}
+	return context;
 };

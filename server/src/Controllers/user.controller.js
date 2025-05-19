@@ -92,8 +92,20 @@ const loginUser = async (req, res) => {
 
 const allUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    // Only return users that are not players (accounts)
+    const users = await User.find({ isPlayer: { $ne: true } });
     res.status(200).json({ users });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// New function to get only players
+const getAllPlayers = async (req, res) => {
+  try {
+    // Only return users that are players
+    const players = await User.find({ isPlayer: true });
+    res.status(200).json({ users: players });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -188,20 +200,116 @@ const deleteUser = async (req, res) => {
         .json({ message: "Something went wrong while deleting the user" });
     }
 
-    return res
-      .status(200)
-      .json({ data: deletedUser, message: "User is removed successfully" });
+    // Send different messages based on whether it's a player or an account
+    const message = deletedUser.isPlayer 
+      ? "Player deleted successfully" 
+      : "Account deleted successfully";
+
+    return res.status(200).json({ data: deletedUser, message });
   } catch (err) {
     console.log(err);
+    return res.status(500).json({ message: "Error deleting user" });
   }
 };
 
+// New function to import players from CSV
+const importPlayersFromCSV = async (req, res) => {
+  try {
+    const { players } = req.body;
+    
+    if (!players || !Array.isArray(players) || players.length === 0) {
+      return res.status(400).json({ message: "No player data provided" });
+    }
+    
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: []
+    };
+    
+    // Process each player from the CSV
+    for (const playerData of players) {
+      try {
+        // Validate required fields - now including age, gender, and phone
+        if (!playerData.name || !playerData.email || !playerData.age || !playerData.gender || !playerData.phone) {
+          results.failed++;
+          const missingFields = [];
+          if (!playerData.name) missingFields.push("name");
+          if (!playerData.email) missingFields.push("email");
+          if (!playerData.age) missingFields.push("age");
+          if (!playerData.gender) missingFields.push("gender");
+          if (!playerData.phone) missingFields.push("phone");
+          
+          results.errors.push(`Missing required fields (${missingFields.join(", ")}) for player ${playerData.name || playerData.email || "unknown"}`);
+          continue;
+        }
+        
+        // Generate a username from name if not provided
+        const username = playerData.username || 
+          playerData.name.toLowerCase().replace(/\s+/g, '_');
+        
+        // Generate a random password
+        const password = Math.random().toString(36).slice(-8);
+        
+        // Check if user with this email already exists
+        const existingUser = await User.findOne({ email: playerData.email });
+        if (existingUser) {
+          results.failed++;
+          results.errors.push(`User with email ${playerData.email} already exists`);
+          continue;
+        }
+        
+        // Convert age to number if provided
+        const age = parseInt(playerData.age, 10);
+        if (isNaN(age)) {
+          results.failed++;
+          results.errors.push(`Invalid age value for player ${playerData.name}: ${playerData.age}`);
+          continue;
+        }
+        
+        // Create the user with player role
+        const newUser = new User({
+          jobrole: "match controller", // Default role for imported players
+          username,
+          email: playerData.email,
+          password,
+          isPlayer: true, // Mark as a player
+          // Add additional fields from CSV
+          playerDetails: {
+            name: playerData.name,
+            phone: playerData.phone,
+            age: age,
+            gender: playerData.gender,
+            address: playerData.address || ""
+          }
+        });
+        
+        await newUser.save();
+        results.success++;
+      } catch (error) {
+        console.error("Error importing player:", error);
+        results.failed++;
+        results.errors.push(`Error importing ${playerData.name || playerData.email}: ${error.message}`);
+      }
+    }
+    
+    return res.status(200).json({ 
+      message: `Successfully imported ${results.success} players. Failed: ${results.failed}`,
+      results 
+    });
+  } catch (error) {
+    console.error("CSV import error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
 export {
   registerUser,
   loginUser,
   allUsers,
+  getAllPlayers,
   getUser,
   updateUserDetail,
   createNewPassword,
   deleteUser,
+  importPlayersFromCSV
 };

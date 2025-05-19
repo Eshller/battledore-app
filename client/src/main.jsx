@@ -24,6 +24,7 @@ import {
   ScorePage,
   MatchDetails,
   Umpire,
+  Players,
 } from "./pages/pages.js";
 
 import {
@@ -44,7 +45,7 @@ const router = createBrowserRouter(
       <Route element={<App />}>
         <Route path="home" element={<Home />} />
         <Route path="accounts" element={<Accounts />} />
-        <Route path="players" element={<Navigate to="/accounts" replace />} />
+        <Route path="players" element={<Players />} />
         <Route path="livescore" element={<LiveScore />} />
         <Route path="matchdetails/:id" element={<MatchDetails />} />
         <Route path="events" element={<Events />}>

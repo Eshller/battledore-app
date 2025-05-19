@@ -6,8 +6,6 @@ import io from "socket.io-client";
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconductUpdate, scores = [] }) => {
-  console.log("misconducts", misconducts)
-  console.log("scores prop", scores)
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
   const [isScorePage, setIsScorePage] = useState(false);
@@ -27,11 +25,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
     if (!matchData) return;
 
     const handleScoreUpdate = (data) => {
-      console.log("Score update received:", data);
-      console.log("Current gameId:", gameId.id);
-      
       if (data.status === "start" && data.gameId === gameId.id) {
-        console.log("Updating table data with new score");
         setTableData(prev => {
           // If tableData is empty, initialize it with a default entry
           if (!prev || prev.length === 0) {
