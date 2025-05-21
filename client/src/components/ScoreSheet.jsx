@@ -281,12 +281,12 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
 
   const leftSideTeam = matchData ? (
     matchData.firstTeamName === matchData.receiver
-      ? matchData.secondTeamName
-      : matchData.firstTeamName
+      ? (matchData.secondTeamName || matchData.playerTwo)
+      : (matchData.firstTeamName || matchData.playerOne)
   ) : '';
 
   // Check if we have valid matchData
-  if (!matchData || !matchData.firstTeamName) {
+  if (!matchData) {
     return (
       <div className="bg-white rounded-lg shadow-lg p-4 text-center">
         <p className="text-gray-500">Loading score sheet data...</p>

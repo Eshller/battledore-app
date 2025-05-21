@@ -7,7 +7,7 @@ import io from "socket.io-client";
 // const socket = io.connect("http://localhost:3001");
 const socket = io(`${import.meta.env.VITE_SERVER}`);
 
-function MatchForm({ event }) {
+function MatchForm({ event, onClose }) {
 	const { addMatch, getAllUsers, playerList } = useService();
 
 	const [matchTypeOption, setMatchTypeOption] = useState(false);
@@ -17,6 +17,14 @@ function MatchForm({ event }) {
 	const [showUmpireDropdown, setShowUmpireDropdown] = useState(false);
 	const umpireDropdownRef = React.useRef(null);
 
+	// Ensure the parent component is notified when matchBox state changes
+	useEffect(() => {
+		if (!matchBox && onClose) {
+			console.log("matchBox state changed to false, calling onClose");
+			onClose();
+		}
+	}, [matchBox]);
+	
 	const [matchDetail, setMatchDetail] = useState({
 		eventDetails: event?._id,
 		typeOfMatch: "",
@@ -112,24 +120,40 @@ function MatchForm({ event }) {
 
 	const handleSumbmit = async (e) => {
 		e.preventDefault();
+		console.log("Form submission started");
 
-		// Validate all required fields
-		if (!matchDetail.firstTeamName || !matchDetail.secondTeamName) {
-			toast.error("All fields are required");
+		// Validate required fields
+		if (!matchDetail.typeOfMatch || !matchDetail.playerOne || !matchDetail.playerTwo || !matchDetail.umpireId || !matchDetail.matchDate) {
+			toast.error("Type of match, player names, umpire, and match date are required");
 			return;
+		}
+
+		// Verify date and stop if invalid
+		const formattedDate = verifyDate();
+		if (!formattedDate) {
+			return; // verifyDate already shows an error toast
 		}
 
 		try {
 			const newDetails = {
 				...matchDetail,
-				matchDate: verifyDate(),
+				matchDate: formattedDate,
 			};
+			
+			console.log("Submitting match data:", newDetails);
 			const response = await addMatch(event?._id, newDetails);
+			console.log("Match creation response:", response);
 
-			if (response.status == 201) {
-				socket.emit("new_match_created", response.match._id);
+			if (response && response.status === 201) {
+				// Don't show another success toast here, as addMatch already shows one
+				if (response.data && response.data.match && response.data.match._id) {
+					socket.emit("new_match_created", response.data.match._id);
+				}
+				console.log("Match created successfully, closing form");
 
+				// Reset form data
 				setMatchDetail({
+					eventDetails: event?._id,
 					typeOfMatch: "",
 					firstTeamName: "",
 					secondTeamName: "",
@@ -141,16 +165,23 @@ function MatchForm({ event }) {
 					matchDate: "",
 					totalPoints: 21,
 				});
-				setMatchBox(!matchBox);
-			} else {
-				// Handle specific error cases
-				if (response.status === 500) {
-					toast.error("Server error. Please try again later.");
+				
+				// Close the form immediately
+				console.log("Directly calling onClose callback");
+				if (onClose) {
+					onClose();
+				}
+				setMatchBox(false);
+			} else if (response) {
+				// Only show error toast if there's actually an error and addMatch didn't already show one
+				const errorMessage = response?.message || "Failed to create match";
+				if (response.status !== 201) {
+					toast.error(errorMessage);
 				}
 			}
 		} catch (error) {
 			console.error("Match creation error:", error);
-			toast.error("Failed to create match. Please try again.");
+			// Don't show duplicate error toast as addMatch already handles errors
 		}
 	};
 
@@ -201,7 +232,7 @@ function MatchForm({ event }) {
 						</div>
 						<div className="block sm:flex justify-between">
 							<label htmlFor="firstTeamName" className="mx-2 font-semibold">
-								Team 1 :
+								Team 1 <span className="text-gray-500 font-normal">(optional)</span> :
 							</label>
 							<input
 								type="text"
@@ -210,6 +241,7 @@ function MatchForm({ event }) {
 								onChange={handleMatchData}
 								id=""
 								className="border-b-[1px] font-medium border-slate-500 outline-none px-4 py-1 flex-1"
+								placeholder="Leave blank for individual players"
 							/>
 						</div>
 						<div className="block sm:flex justify-between">
@@ -249,7 +281,7 @@ function MatchForm({ event }) {
 						</div>
 						<div className="block sm:flex justify-between">
 							<label htmlFor="secondTeamName" className="mx-2 font-semibold">
-								Team 2 :
+								Team 2 <span className="text-gray-500 font-normal">(optional)</span> :
 							</label>
 							<input
 								type="text"
@@ -258,6 +290,7 @@ function MatchForm({ event }) {
 								onChange={handleMatchData}
 								id=""
 								className="border-b-[1px] font-medium border-slate-500 outline-none px-4 py-1 flex-1"
+								placeholder="Leave blank for individual players"
 							/>
 						</div>
 						<div className="block sm:flex justify-between">
@@ -382,7 +415,14 @@ function MatchForm({ event }) {
 								width="24px"
 								fill="#1"
 								className="cursor-pointer"
-								onClick={() => setMatchBox(!matchBox)}
+								onClick={() => {
+									console.log("Close button clicked");
+									setMatchBox(false);
+									if (onClose) {
+										console.log("Calling onClose from close button");
+										onClose();
+									}
+								}}
 							>
 								<path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
 							</svg>

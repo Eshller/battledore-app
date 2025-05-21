@@ -35,11 +35,9 @@ const matSchema = new Schema(
     },
     firstTeamName: {
       type: String,
-      required: true,
     },
     secondTeamName: {
       type: String,
-      required: true,
     },
     playerOne: {
       type: String,

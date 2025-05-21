@@ -11,74 +11,67 @@ function Umpire() {
 
   const { startMatch } = useService();
   const [teamOption, setTeamOption] = useState(false);
-  const [teamOptionForReceiver, setTeamOptionForReceiver] = useState(false);
-  const [serverPlayerOptions, setServerPlayerOptions] = useState(false);
-  const [receiverPlayerOptions, setReceiverPlayerOptions] = useState(false);
-  const [rightTeamOption, setRightTeamOption] = useState(false);
+  const [serverOptions, setServerOptions] = useState(false);
+  const [receiverOptions, setReceiverOptions] = useState(false);
+  const [rightSideOption, setRightSideOption] = useState(false);
 
   const [gameState, setGameState] = useState({
     eventPlace: "",
     server: "",
     receiver: "",
-    serverTeam: "",
-    receiverTeam: "",
-    rightTeam: "",
+    rightTeam: "", // Keeping variable name for backend compatibility
   });
 
-  // Get players based on team
-  const getTeamPlayers = (teamName) => {
-    if (teamName === match?.firstTeamName) {
-      return match?.playerThree 
-        ? [match?.playerOne, match?.playerThree] 
-        : [match?.playerOne];
-    } else if (teamName === match?.secondTeamName) {
-      return match?.playerFour 
-        ? [match?.playerTwo, match?.playerFour] 
-        : [match?.playerTwo];
+  // Check if this is a team match or individual match
+  const isTeamMatch = !!(match?.firstTeamName && match?.secondTeamName);
+
+  // Get players for selection
+  const getPlayers = (side) => {
+    if (!isTeamMatch) {
+      // For individual matches, just return all players
+      const players = [];
+      if (match?.playerOne) players.push(match.playerOne);
+      if (match?.playerTwo) players.push(match.playerTwo);
+      if (match?.playerThree) players.push(match.playerThree);
+      if (match?.playerFour) players.push(match.playerFour);
+      return players;
+    } else {
+      // For team matches, return players based on the team
+      if (side === match?.firstTeamName) {
+        return match?.playerThree 
+          ? [match?.playerOne, match?.playerThree] 
+          : [match?.playerOne];
+      } else if (side === match?.secondTeamName) {
+        return match?.playerFour 
+          ? [match?.playerTwo, match?.playerFour] 
+          : [match?.playerTwo];
+      }
+      return [];
     }
-    return [];
   };
 
-  function selectServerTeam(teamName) {
+  function selectRightSide(value) {
     setGameState({
       ...gameState,
-      serverTeam: teamName,
-      server: "", // Reset server when team changes
+      rightTeam: value,
     });
-    setTeamOption(false);
+    setRightSideOption(false);
   }
 
-  function selectReceiverTeam(teamName) {
-    setGameState({
-      ...gameState,
-      receiverTeam: teamName,
-      receiver: "", // Reset receiver when team changes
-    });
-    setTeamOptionForReceiver(false);
-  }
-
-  function selectRightTeam(teamName) {
-    setGameState({
-      ...gameState,
-      rightTeam: teamName,
-    });
-    setRightTeamOption(false);
-  }
-
-  function selectServerPlayer(playerName) {
+  function selectServer(playerName) {
     setGameState({
       ...gameState,
       server: playerName,
     });
-    setServerPlayerOptions(false);
+    setServerOptions(false);
   }
 
-  function selectReceiverPlayer(playerName) {
+  function selectReceiver(playerName) {
     setGameState({
       ...gameState,
       receiver: playerName,
     });
-    setReceiverPlayerOptions(false);
+    setReceiverOptions(false);
   }
 
   function toSentenceCase(str) {
@@ -131,13 +124,40 @@ function Umpire() {
           eventPlace: "",
           server: "",
           receiver: "",
-          serverTeam: "",
-          receiverTeam: "",
           rightTeam: "",
         });
         Navigate(`/scorepage/${match?._id}`);
       }
     }
+  };
+
+  // Get right side options
+  const getRightSideOptions = () => {
+    if (isTeamMatch) {
+      // For team matches, return team names
+      return [match?.firstTeamName, match?.secondTeamName];
+    } else {
+      // For individual matches, return player combinations
+      const firstSide = match?.playerThree 
+        ? `${match?.playerOne} & ${match?.playerThree}` 
+        : match?.playerOne;
+      
+      const secondSide = match?.playerFour 
+        ? `${match?.playerTwo} & ${match?.playerFour}` 
+        : match?.playerTwo;
+      
+      return [firstSide, secondSide];
+    }
+  };
+
+  // Get all players for server/receiver selection
+  const getAllPlayers = () => {
+    const players = [];
+    if (match?.playerOne) players.push(match.playerOne);
+    if (match?.playerTwo) players.push(match.playerTwo);
+    if (match?.playerThree) players.push(match.playerThree);
+    if (match?.playerFour) players.push(match.playerFour);
+    return players;
   };
 
   return (
@@ -155,15 +175,7 @@ function Umpire() {
               </h1>
               <p className="opacity-80">Type of match : {match?.typeOfMatch}</p>
               <p className="opacity-80">
-                Teams : {match?.firstTeamName} vs. {match?.secondTeamName}
-              </p>
-              <p className="opacity-80">
-                First team player's name : {match?.playerOne}
-                {match?.playerThree ? " & " + match?.playerThree : null}
-              </p>
-              <p className="opacity-80">
-                Second team player's name : {match?.playerTwo}
-                {match?.playerFour ? " & " + match?.playerFour : null}
+                Players : {match?.playerOne}{match?.playerThree ? " & " + match?.playerThree : ""} vs. {match?.playerTwo}{match?.playerFour ? " & " + match?.playerFour : ""}
               </p>
               <p className="opacity-80">
                 Total Points : {match?.totalPoints || 21}
@@ -174,6 +186,7 @@ function Umpire() {
               className="w-full max-h-[300px] lg:min-h-[500px] flex flex-col justify-between gap-10 md:gap-5 p-2 md:p-7 xl:p-10"
             >
               <div className="flex flex-col gap-4 lg:gap-10 p-5 md:p-0">
+                {/* Court Number field */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
@@ -187,7 +200,7 @@ function Umpire() {
                   />
                 </div>
                 
-                {/* Team on the right selection */}
+                {/* Player on the right selection */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
@@ -196,132 +209,77 @@ function Umpire() {
                     name="rightTeam"
                     value={gameState.rightTeam}
                     onChange={handleChange}
-                    onClick={() => setRightTeamOption((prev) => !prev)}
-                    placeholder="Team on your right"
+                    onClick={() => setRightSideOption((prev) => !prev)}
+                    placeholder="Player(s) on your right"
                     className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
                   />
-                  {rightTeamOption && (
+                  {rightSideOption && (
                     <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                      <p onClick={() => selectRightTeam(match.firstTeamName)}>
-                        {match?.firstTeamName}
-                      </p>
-                      <p className="border-b-[1px] border-slate-800"></p>
-                      <p onClick={() => selectRightTeam(match.secondTeamName)}>
-                        {match?.secondTeamName}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Server Team Selection */}
-                <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
-                  <img src=".././ri_team-line.png" alt="icon" className="w-8" />
-
-                  <input
-                    type="text"
-                    name="serverTeam"
-                    value={gameState.serverTeam}
-                    onChange={handleChange}
-                    onClick={() => setTeamOption((prev) => !prev)}
-                    placeholder="Serving Team"
-                    className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                  />
-                  {teamOption && (
-                    <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                      <p onClick={() => selectServerTeam(match.firstTeamName)}>
-                        {match?.firstTeamName}
-                      </p>
-                      <p className="border-b-[1px] border-slate-800"></p>
-                      <p onClick={() => selectServerTeam(match.secondTeamName)}>
-                        {match?.secondTeamName}
-                      </p>
+                      {getRightSideOptions().map((option, index) => (
+                        <React.Fragment key={index}>
+                          {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
+                          <p onClick={() => selectRightSide(option)}>
+                            {option}
+                          </p>
+                        </React.Fragment>
+                      ))}
                     </div>
                   )}
                 </div>
                 
                 {/* Server Player Selection */}
-                {gameState.serverTeam && (
-                  <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
-                    <img src=".././ri_team-line.png" alt="icon" className="w-8" />
-
-                    <input
-                      type="text"
-                      name="server"
-                      value={gameState.server}
-                      onChange={handleChange}
-                      onClick={() => setServerPlayerOptions((prev) => !prev)}
-                      placeholder="Server Player"
-                      className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                    />
-                    {serverPlayerOptions && (
-                      <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                        {getTeamPlayers(gameState.serverTeam).map((player, index) => (
-                          <React.Fragment key={index}>
-                            {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
-                            <p onClick={() => selectServerPlayer(player)}>
-                              {player}
-                            </p>
-                          </React.Fragment>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Receiver Team Selection */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
                   <input
                     type="text"
-                    name="receiverTeam"
-                    value={gameState.receiverTeam}
+                    name="server"
+                    value={gameState.server}
                     onChange={handleChange}
-                    onClick={() => setTeamOptionForReceiver(!teamOptionForReceiver)}
-                    placeholder="Receiving Team"
+                    onClick={() => setServerOptions((prev) => !prev)}
+                    placeholder="Server Player"
                     className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
                   />
-                  {teamOptionForReceiver && (
+                  {serverOptions && (
                     <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                      <p onClick={() => selectReceiverTeam(match.firstTeamName)}>
-                        {match?.firstTeamName}
-                      </p>
-                      <p className="border-b-[1px] border-slate-800"></p>
-                      <p onClick={() => selectReceiverTeam(match.secondTeamName)}>
-                        {match?.secondTeamName}
-                      </p>
+                      {getAllPlayers().map((player, index) => (
+                        <React.Fragment key={index}>
+                          {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
+                          <p onClick={() => selectServer(player)}>
+                            {player}
+                          </p>
+                        </React.Fragment>
+                      ))}
                     </div>
                   )}
                 </div>
                 
                 {/* Receiver Player Selection */}
-                {gameState.receiverTeam && (
-                  <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
-                    <img src=".././ri_team-line.png" alt="icon" className="w-8" />
+                <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
+                  <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
-                    <input
-                      type="text"
-                      name="receiver"
-                      value={gameState.receiver}
-                      onChange={handleChange}
-                      onClick={() => setReceiverPlayerOptions((prev) => !prev)}
-                      placeholder="Receiver Player"
-                      className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                    />
-                    {receiverPlayerOptions && (
-                      <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                        {getTeamPlayers(gameState.receiverTeam).map((player, index) => (
-                          <React.Fragment key={index}>
-                            {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
-                            <p onClick={() => selectReceiverPlayer(player)}>
-                              {player}
-                            </p>
-                          </React.Fragment>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  <input
+                    type="text"
+                    name="receiver"
+                    value={gameState.receiver}
+                    onChange={handleChange}
+                    onClick={() => setReceiverOptions((prev) => !prev)}
+                    placeholder="Receiver Player"
+                    className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
+                  />
+                  {receiverOptions && (
+                    <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
+                      {getAllPlayers().map((player, index) => (
+                        <React.Fragment key={index}>
+                          {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
+                          <p onClick={() => selectReceiver(player)}>
+                            {player}
+                          </p>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <button
                 onClick={handleStartGame}

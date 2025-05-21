@@ -63,8 +63,6 @@ const createMatch = async (req, res) => {
       [
         eventDetails,
         typeOfMatch,
-        firstTeamName,
-        secondTeamName,
         playerOne,
         playerTwo,
         umpireId,
@@ -89,8 +87,8 @@ const createMatch = async (req, res) => {
     const newMatch = new Match({
       eventDetails,
       typeOfMatch,
-      firstTeamName,
-      secondTeamName,
+      firstTeamName: firstTeamName || playerOne,
+      secondTeamName: secondTeamName || playerTwo,
       playerOne,
       playerTwo,
       playerThree,

@@ -248,7 +248,7 @@ function MatchDetails() {
 												: liveScore.firstTeamScore}
 										</span>
 										<p className="text-sm mt-1 font-normal opacity-80">
-											{matchData?.firstTeamName}
+											{matchData?.firstTeamName || matchData?.playerOne}
 										</p>
 									</div>
 									<span className="opacity-50">vs</span>
@@ -259,7 +259,7 @@ function MatchDetails() {
 												: liveScore.secondTeamScore}
 										</span>
 										<p className="text-sm mt-1 font-normal opacity-80">
-											{matchData?.secondTeamName}
+											{matchData?.secondTeamName || matchData?.playerTwo}
 										</p>
 									</div>
 								</div>

@@ -25,7 +25,12 @@ function MatchList({ match, eventId }) {
       <div className="rounded-2xl px-3 py-1 md:p-4 my-4 text-base md:text-lg bg-[#7cb6cb] text-white font-inter font-medium flex justify-between items-center">
         <div className="lg:flex gap-5">
           <h1>{match?.typeOfMatch}</h1>
-          <p>{`${match?.firstTeamName} vs ${match?.secondTeamName}`}</p>
+          <p>
+            {match?.firstTeamName && match?.secondTeamName 
+              ? `${match?.firstTeamName} vs ${match?.secondTeamName}`
+              : `${match?.playerOne}${match?.playerThree ? ` & ${match?.playerThree}` : ''} vs ${match?.playerTwo}${match?.playerFour ? ` & ${match?.playerFour}` : ''}`
+            }
+          </p>
           <p>{match?.matchDate}</p>
           <p>{toSentenceCase(match?.referee)}</p>
         </div>
