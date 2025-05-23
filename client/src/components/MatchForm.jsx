@@ -20,7 +20,6 @@ function MatchForm({ event, onClose }) {
 	// Ensure the parent component is notified when matchBox state changes
 	useEffect(() => {
 		if (!matchBox && onClose) {
-			console.log("matchBox state changed to false, calling onClose");
 			onClose();
 		}
 	}, [matchBox]);
@@ -120,14 +119,13 @@ function MatchForm({ event, onClose }) {
 
 	const handleSumbmit = async (e) => {
 		e.preventDefault();
-		console.log("Form submission started");
 
 		// Validate required fields
 		if (!matchDetail.typeOfMatch || !matchDetail.playerOne || !matchDetail.playerTwo || !matchDetail.umpireId || !matchDetail.matchDate) {
 			toast.error("Type of match, player names, umpire, and match date are required");
 			return;
 		}
-
+		
 		// Verify date and stop if invalid
 		const formattedDate = verifyDate();
 		if (!formattedDate) {
@@ -139,17 +137,15 @@ function MatchForm({ event, onClose }) {
 				...matchDetail,
 				matchDate: formattedDate,
 			};
-			
-			console.log("Submitting match data:", newDetails);
+
 			const response = await addMatch(event?._id, newDetails);
-			console.log("Match creation response:", response);
+
 
 			if (response && response.status === 201) {
 				// Don't show another success toast here, as addMatch already shows one
 				if (response.data && response.data.match && response.data.match._id) {
 					socket.emit("new_match_created", response.data.match._id);
 				}
-				console.log("Match created successfully, closing form");
 
 				// Reset form data
 				setMatchDetail({
@@ -167,7 +163,6 @@ function MatchForm({ event, onClose }) {
 				});
 				
 				// Close the form immediately
-				console.log("Directly calling onClose callback");
 				if (onClose) {
 					onClose();
 				}
@@ -416,10 +411,8 @@ function MatchForm({ event, onClose }) {
 								fill="#1"
 								className="cursor-pointer"
 								onClick={() => {
-									console.log("Close button clicked");
 									setMatchBox(false);
 									if (onClose) {
-										console.log("Calling onClose from close button");
 										onClose();
 									}
 								}}

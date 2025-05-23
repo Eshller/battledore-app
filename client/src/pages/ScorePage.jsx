@@ -254,6 +254,7 @@ function ScorePage() {
 	) => {
 		const scoreData = {
 			gameId: gameId.id,
+			matchId: gameId.id, // Add matchId for newer components
 			firstTeamScore: f_score,
 			secondTeamScore: s_score,
 			status: isActive,
@@ -2326,7 +2327,8 @@ function ScorePage() {
 					</div>
 				</div>
 				{/* score table */}
-				<div className="w-full md:w-[80%] m-auto">
+				<div className="w-full md:w-[80%] m-auto mt-8 mb-8">
+					<h2 className="text-2xl font-bold text-center mb-4 text-[#5ea0b8]">Match Score Sheet</h2>
 					<ScoreSheet
 						selectedPlayer={selectedPlayer}
 						misconduct={misconduct}

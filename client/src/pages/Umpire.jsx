@@ -24,6 +24,12 @@ function Umpire() {
 
   // Check if this is a team match or individual match
   const isTeamMatch = !!(match?.firstTeamName && match?.secondTeamName);
+  
+  // Check if this is a doubles match
+  const isDoublesMatch = match?.typeOfMatch?.toLowerCase().includes('doubles');
+  
+  // Determine if we should show team terminology
+  const showTeamTerminology = isTeamMatch || isDoublesMatch;
 
   // Get players for selection
   const getPlayers = (side) => {
@@ -174,9 +180,33 @@ function Umpire() {
                 <span className="text-[#B1D848]">START</span> MATCH
               </h1>
               <p className="opacity-80">Type of match : {match?.typeOfMatch}</p>
-              <p className="opacity-80">
-                Players : {match?.playerOne}{match?.playerThree ? " & " + match?.playerThree : ""} vs. {match?.playerTwo}{match?.playerFour ? " & " + match?.playerFour : ""}
-              </p>
+              {showTeamTerminology ? (
+                match?.firstTeamName && match?.secondTeamName ? (
+                  <p className="opacity-80">
+                    Teams : {match?.firstTeamName} vs {match?.secondTeamName}
+                  </p>
+                ) : (
+                  <p className="opacity-80">
+                    Teams : {match?.playerOne}{match?.playerThree ? " & " + match?.playerThree : ""} vs {match?.playerTwo}{match?.playerFour ? " & " + match?.playerFour : ""}
+                  </p>
+                )
+              ) : (
+                <p className="opacity-80">
+                  Players : {match?.playerOne} vs {match?.playerTwo}
+                </p>
+              )}
+              {showTeamTerminology && (
+                <>
+                  <p className="opacity-80">
+                    First team player's name : {match?.playerOne}
+                    {match?.playerThree ? " & " + match?.playerThree : null}
+                  </p>
+                  <p className="opacity-80">
+                    Second team player's name : {match?.playerTwo}
+                    {match?.playerFour ? " & " + match?.playerFour : null}
+                  </p>
+                </>
+              )}
               <p className="opacity-80">
                 Total Points : {match?.totalPoints || 21}
               </p>
@@ -200,7 +230,7 @@ function Umpire() {
                   />
                 </div>
                 
-                {/* Player on the right selection */}
+                {/* Player/Team on the right selection */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
@@ -210,7 +240,7 @@ function Umpire() {
                     value={gameState.rightTeam}
                     onChange={handleChange}
                     onClick={() => setRightSideOption((prev) => !prev)}
-                    placeholder="Player(s) on your right"
+                    placeholder={showTeamTerminology ? "Team on your right" : "Player on your right"}
                     className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
                   />
                   {rightSideOption && (

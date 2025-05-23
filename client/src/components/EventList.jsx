@@ -18,12 +18,10 @@ function EventList({ event }) {
   const [clickToDelete, setClickToDelete] = useState(false);
 
   function scheduleMatch() {
-    console.log("Toggle match form visibility:", !match);
     setMatch(!match);
   }
   
   function closeMatchForm() {
-    console.log("Closing match form");
     setMatch(false);
   }
 

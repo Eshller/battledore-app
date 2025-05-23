@@ -3,15 +3,17 @@ import { useParams } from "react-router-dom";
 import { useService } from "../ContextAPI/axios";
 import io from "socket.io-client";
 
-const socket = io(`${import.meta.env.VITE_SERVER}`);
+// Don't create socket instance at module level
+// const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconductUpdate, scores = [] }) => {
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
   const [isScorePage, setIsScorePage] = useState(false);
-
   const [tableData, setTableData] = useState([]);
   const prevMisconductsRef = useRef(misconducts);
+  // Create socket reference
+  const socketRef = useRef(null);
 
   // Determine if we're on the score page or match details page
   useEffect(() => {
@@ -23,25 +25,31 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
   // Handle real-time score updates
   useEffect(() => {
     if (!matchData) return;
+    
+    // Create socket instance on component mount
+    if (!socketRef.current) {
+      socketRef.current = io(`${import.meta.env.VITE_SERVER}`);
+    }
+    
+    const socket = socketRef.current;
 
     const handleScoreUpdate = (data) => {
-      if (data.status === "start" && data.gameId === gameId.id) {
-        setTableData(prev => {
-          // If tableData is empty, initialize it with a default entry
+      // Check for both matchId and gameId in the data
+      const matchIdToCheck = data.matchId || data.gameId;
+      
+      if (matchData && gameId.id === matchIdToCheck) {
+        // Skip updates where both scores are 0
+        if (data.firstTeamScore === "0" && data.secondTeamScore === "0") {
+          return;
+        }
+        
+        setTableData((prev) => {
+          // If tableData is empty, create a new entry with the incoming data
           if (!prev || prev.length === 0) {
-            const initialState = {
-              firstTeamScore: "0",
-              secondTeamScore: "0",
-              firstTeamName: matchData.firstTeamName,
-              secondTeamName: matchData.secondTeamName,
-              scoringTeam: 'start',
-              status: 'initial',
-              timestamp: new Date().toISOString(),
-              isMisconduct: false
-            };
-            return [initialState, {
+            return [{
               ...data,
               scoringTeam: data.scoringTeam || 'first',
+              status: 'point',
               timestamp: data.timestamp || new Date().toISOString(),
               isMisconduct: false,
               firstTeamName: matchData.firstTeamName,
@@ -62,6 +70,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           const newEntry = {
             ...data,
             scoringTeam: data.scoringTeam || scoringTeam,
+            status: 'point',
             timestamp: data.timestamp || new Date().toISOString(),
             isMisconduct: false,
             firstTeamName: matchData.firstTeamName,
@@ -97,10 +106,22 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
     socket.on("score", handleScoreUpdate);
     
     return () => {
-      socket.off("score_updated");
-      socket.off("score");
+      if (socketRef.current) {
+        socketRef.current.off("score_updated");
+        socketRef.current.off("score");
+      }
     };
   }, [matchData, gameId.id]);
+
+  // Add an effect to clean up the socket connection when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
 
   // Initialize table data with match data and initial misconducts
   useEffect(() => {
@@ -109,24 +130,19 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
 
       const firstTeamName = matchData.firstTeamName;
       const secondTeamName = matchData.secondTeamName;
-      const initialState = {
-        firstTeamScore: "0",
-        secondTeamScore: "0",
-        firstTeamName,
-        secondTeamName,
-        scoringTeam: 'start',
-        status: 'initial',
-        timestamp: new Date(0).toISOString(), // Use earliest possible timestamp for initial state
-        isMisconduct: false
-      };
-
+      
       // Use scores prop if provided and not on score page, otherwise use matchData.scores
       // This ensures that on the score page, we always use matchData.scores for real-time updates
       const scoreData = (!isScorePage && scores.length > 0) ? scores : (matchData.scores || []);
       
+      // Don't use scores with zero values (0-0)
+      const filteredScoreData = scoreData.filter(score => 
+        score.firstTeamScore !== "0" || score.secondTeamScore !== "0"
+      );
+      
       // Create score entries with proper timestamps
-      const scoreEntries = scoreData.map((score, index) => {
-        const previousScore = index > 0 ? scoreData[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
+      const scoreEntries = filteredScoreData.map((score, index) => {
+        const previousScore = index > 0 ? filteredScoreData[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
         const scoringTeam =
           parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
             ? 'first'
@@ -140,7 +156,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           firstTeamName,
           secondTeamName,
           scoringTeam,
-          status: 'start',
+          status: 'point',
           timestamp: score.createdAt || score.timestamp || new Date().toISOString(),
           numberOfShuttlecock: score.numberOfShuttlecock,
           isMisconduct: false,
@@ -177,8 +193,15 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
       const allEntries = [...scoreEntries, ...misconductEntries]
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-      // Set the table data with initial state and all entries
-      setTableData([initialState, ...allEntries]);
+      // Set the table data with filtered entries - skip the initialState if we have actual scores
+      if (allEntries.length > 0) {
+        // Filter out the initial entry with status 'initial'
+        const filteredEntries = allEntries.filter(entry => entry.status !== 'initial');
+        setTableData(filteredEntries);
+      } else {
+        // If no scores, show empty state instead of initial entry
+        setTableData([]);
+      }
     };
 
     initializeTable();
@@ -305,263 +328,244 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
 
   return (
     <div>
-      <div className="bg-white rounded-lg shadow-lg p-4 overflow-x-auto w-full">
-        <table className="table-auto border-collapse w-full">
-          <tbody>
-            <tr>
-              <td className="flex items-center border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white min-w-[200px]">
-                {leftSideTeam == matchData.firstTeamName
-                  ? matchData.playerOne
-                  : matchData.playerTwo}
-                {/* {renderMisconducts(leftSideTeam == matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)} */}
-              </td>
-              {tableData.map((row, index) => (
-                <td
-                  key={index}
-                  className="border border-[#5ea0b8] text-center px-4 py-2 min-w-[40px]"
-                >
-                  <div className="flex flex-col items-center">
-                    {/* Show score */}
-                    <div>
-                      {index === 0 ? 'S' :
-                        index === 1 ? '0' :
-                          (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)) ?
+      <div className="bg-white rounded-lg shadow-lg p-4 w-full relative">
+        <div className="flex">
+          {/* Fixed Players Column */}
+          <div className="w-[250px] shadow-xl z-30 relative bg-white">
+            <table className="w-full border-collapse table-fixed">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 bg-[#5ea0b8] text-white font-bold border-r-4 border-[#5ea0b8] w-[250px]">
+                    Players
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-4 py-2 bg-white border-r-4 border-[#5ea0b8] font-medium h-[52px]">
+                    {leftSideTeam == matchData.firstTeamName
+                      ? matchData.playerOne
+                      : matchData.playerTwo}
+                  </td>
+                </tr>
+                
+                {matchData.playerThree != "" ? (
+                  <tr>
+                    <td className="px-4 py-2 bg-white border-r-4 border-[#5ea0b8] font-medium h-[52px]">
+                      {leftSideTeam == matchData.firstTeamName
+                        ? matchData.playerThree
+                        : matchData.playerFour}
+                    </td>
+                  </tr>
+                ) : null}
+                
+                <tr className="border-t-4 border-[#5ea0b8]">
+                  <td className="px-4 py-2 bg-white border-r-4 border-[#5ea0b8] font-medium h-[52px]">
+                    {leftSideTeam == matchData.firstTeamName
+                      ? matchData.playerTwo
+                      : matchData.playerOne}
+                  </td>
+                </tr>
+                
+                {matchData.playerFour != "" ? (
+                  <tr>
+                    <td className="px-4 py-2 bg-white border-r-4 border-[#5ea0b8] font-medium h-[52px]">
+                      {leftSideTeam == matchData.firstTeamName
+                        ? matchData.playerFour
+                        : matchData.playerThree}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Scrollable Scores Area */}
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full border-collapse table-auto">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 bg-[#5ea0b8] text-white font-bold border border-[#5ea0b8] text-center" colSpan={tableData.length}>
+                    Scores
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {tableData.map((row, index) => (
+                    <td
+                      key={index}
+                      className="border border-[#5ea0b8] text-center px-4 py-2 min-w-[40px] h-[52px]"
+                    >
+                      <div className="flex flex-col items-center">
+                        {/* Show score */}
+                        <div className="font-semibold">
+                          {
+                           // Display individual player score if available
+                           (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)) ?
                             (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
-                          // If no individual scoring data, show team score for the first player
-                          (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
+                           // Otherwise show team score
+                           (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
                             (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
-                    </div>
-                    {/* Remove scoring player indicator */}
-                    {/* Show misconduct below score if it exists */}
-                    {row.isMisconduct && row.misconductPlayer === (
-                      leftSideTeam === matchData.firstTeamName
-                        ? matchData.playerOne
-                        : matchData.playerTwo
-                    ) && (
-                      <div className={`text-sm font-bold mt-1 px-1 rounded ${
-                        row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
-                        row.misconductType === "F" ? "bg-red-500 text-white" :
-                        row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
-                        row.misconductType === "S" ? "bg-green-200 text-green-700" :
-                        row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
-                        row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
-                        row.misconductType === "DIS" ? "bg-slate-700 text-white" :
-                        row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
-                        row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
-                      }`}>
-                        {row.misconductType}
-                      </div>
-                    )}
-                  </div>
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <td className="border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white text-white">
-                {leftSideTeam == matchData.firstTeamName
-                  ? matchData.playerOne
-                  : matchData.playerTwo}
-              </td>
-              {tableData.map((row, index) => (
-                <td
-                  key={index}
-                  className="border border-[#5ea0b8] text-center px-2"
-                >
-                  {row.isMisconduct &&
-                    row.misconductPlayer === (
-                      leftSideTeam === matchData.firstTeamName
-                        ? matchData.playerOne
-                        : matchData.playerTwo
-                    ) &&
-                    (row.misconductType === 'F' || row.misconductType === 'I') && (
-                      <div className="text-sm font-bold">R</div>
-                    )}
-                </td>
-              ))}
-            </tr>
-            {matchData.playerThree != "" ? (
-              <tr>
-                <td className="flex items-center border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white">
-                  {leftSideTeam == matchData.firstTeamName
-                    ? matchData.playerThree
-                    : matchData.playerFour}
-                </td>
-                {tableData.map((row, index) => (
-                  <td
-                    key={index}
-                    className="border border-[#5ea0b8] text-center"
-                  >
-                    <div className="flex flex-col items-center">
-                      {/* Show score */}
-                      <div>
-                        {(row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerThree : matchData.playerFour)) ?
-                          (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
-                        // If no individual scoring data, show team score for the second player of the first team
-                        (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
-                          (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
-                      </div>
-                      {/* Remove scoring player indicator */}
-                      {/* Show misconduct below score if it exists */}
-                      {row.isMisconduct && row.misconductPlayer === (
-                        leftSideTeam === matchData.firstTeamName
-                          ? matchData.playerThree
-                          : matchData.playerFour
-                      ) && (
-                        <div className={`text-sm font-bold mt-1 px-1 rounded ${
-                          row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
-                          row.misconductType === "F" ? "bg-red-500 text-white" :
-                          row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
-                          row.misconductType === "S" ? "bg-green-200 text-green-700" :
-                          row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
-                          row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
-                          row.misconductType === "DIS" ? "bg-slate-700 text-white" :
-                          row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
-                          row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
-                        }`}>
-                          {row.misconductType}
                         </div>
-                      )}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-            ) : null}
-
-            <tr>
-              <td className="border border-[#5ea0b8] border-t-4 px-4 py-2 sticky left-0 bg-white min-w-[200px] text-black border-l-0 border-r-0">
-                {/* <td className="flex items-center border border-t-4 border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white min-w-[200px]"> */}
-
-                {leftSideTeam == matchData.firstTeamName
-                  ? matchData.playerTwo
-                  : matchData.playerOne}
-                {/* {renderMisconducts(leftSideTeam == matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)} */}
-              </td>
-              {tableData.map((row, index) => (
-                <td
-                  key={index}
-                  className="border border-[#5ea0b8] border-t-4 text-center px-4 py-2 min-w-[40px]"
-                >
-                  <div className="flex flex-col items-center">
-                    {/* Show score */}
-                    <div>
-                      {index === 0 && matchData.server === (
-                        leftSideTeam === matchData.firstTeamName
-                          ? matchData.playerTwo
-                          : matchData.playerOne) ? 'S' :
-                        index === 1 ? '0' :
-                          (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)) ?
-                            (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : 
-                          // If no individual scoring data, show team score for the first player of the second team
-                          (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first')) ?
-                            (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
-                    </div>
-                    {/* Remove scoring player indicator */}
-                    {/* Show misconduct below score if it exists */}
-                    {row.isMisconduct && row.misconductPlayer === (
-                      leftSideTeam === matchData.firstTeamName
-                        ? matchData.playerTwo
-                        : matchData.playerOne
-                    ) && (
-                        <div className={`text-sm font-bold mt-1 px-1 rounded ${
-                          row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
-                          row.misconductType === "F" ? "bg-red-500 text-white" :
-                          row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
-                          row.misconductType === "S" ? "bg-green-200 text-green-700" :
-                          row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
-                          row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
-                          row.misconductType === "DIS" ? "bg-slate-700 text-white" :
-                          row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
-                          row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
-                        }`}>
-                          {row.misconductType}
-                        </div>
-                      )}
-                    {/* {row.isMisconduct &&
-                    row.misconductPlayer === (
-                      leftSideTeam === matchData.firstTeamName
-                        ? matchData.playerOne
-                        : matchData.playerTwo
-                    ) &&
-                    (row.misconductType === 'F' || row.misconductType === 'I') && (
-                      <div className="text-sm font-bold">R</div>
-                    )} */}
-                  </div>
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <td className="border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white text-white">
-                {leftSideTeam == matchData.firstTeamName
-                  ? matchData.playerOne
-                  : matchData.playerTwo}
-              </td>
-              {tableData.map((row, index) => (
-                <td
-                  key={index}
-                  className="border border-[#5ea0b8] text-center px-2"
-                >
-                  {row.isMisconduct &&
-                    row.misconductPlayer === (
-                      leftSideTeam === matchData.firstTeamName
-                        ? matchData.playerOne
-                        : matchData.playerTwo
-                    ) &&
-                    (row.misconductType === 'F' || row.misconductType === 'I') && (
-                      <div className="text-sm font-bold">R</div>
-                    )}
-                </td>
-              ))}
-            </tr>
-
-            {matchData.playerFour != "" ? (
-              <tr>
-                <td className="border border-[#5ea0b8] border-l-0 border-r-0 px-4 py-2 sticky left-0 bg-white">
-                  {leftSideTeam == matchData.firstTeamName
-                    ? matchData.playerFour
-                    : matchData.playerThree}
-                </td>
-                {tableData.map((row, index) => (
-                  <td
-                    key={index}
-                    className="border border-[#5ea0b8] text-center"
-                  >
-                    <div className="flex flex-col items-center">
-                      {/* Show score */}
-                      <div>
-                        {(row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerFour : matchData.playerThree)) ?
-                          (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : 
-                        // If no individual scoring data, show team score for the second player of the second team
-                        (!row.individualScore && index > 1 && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first')) ?
-                          (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
+                        {/* Show misconduct below score if it exists */}
+                        {row.isMisconduct && row.misconductPlayer === (
+                          leftSideTeam === matchData.firstTeamName
+                            ? matchData.playerOne
+                            : matchData.playerTwo
+                        ) && (
+                          <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                            row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                            row.misconductType === "F" ? "bg-red-500 text-white" :
+                            row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                            row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                            row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                            row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                            row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                            row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                            row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                          }`}>
+                            {row.misconductType}
+                          </div>
+                        )}
                       </div>
-                      {/* Remove scoring player indicator */}
-                      {/* Show misconduct below score if it exists */}
-                      {row.isMisconduct && row.misconductPlayer === (
-                        leftSideTeam === matchData.firstTeamName
-                          ? matchData.playerFour
-                          : matchData.playerThree
-                      ) && (
-                        <div className={`text-sm font-bold mt-1 px-1 rounded ${
-                          row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
-                          row.misconductType === "F" ? "bg-red-500 text-white" :
-                          row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
-                          row.misconductType === "S" ? "bg-green-200 text-green-700" :
-                          row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
-                          row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
-                          row.misconductType === "DIS" ? "bg-slate-700 text-white" :
-                          row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
-                          row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
-                        }`}>
-                          {row.misconductType}
+                    </td>
+                  ))}
+                </tr>
+
+                {matchData.playerThree != "" ? (
+                  <tr>
+                    {tableData.map((row, index) => (
+                      <td
+                        key={index}
+                        className="border border-[#5ea0b8] text-center px-4 py-2 h-[52px]"
+                      >
+                        <div className="flex flex-col items-center">
+                          {/* Show score */}
+                          <div className="font-semibold">
+                            {
+                             // Display individual player score if available
+                             (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerThree : matchData.playerFour)) ?
+                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
+                             // Otherwise show team score
+                             (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
+                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
+                          </div>
+                          {/* Show misconduct below score if it exists */}
+                          {row.isMisconduct && row.misconductPlayer === (
+                            leftSideTeam === matchData.firstTeamName
+                              ? matchData.playerThree
+                              : matchData.playerFour
+                          ) && (
+                            <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                              row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                              row.misconductType === "F" ? "bg-red-500 text-white" :
+                              row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                              row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                              row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                              row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                              row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                              row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                              row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                            }`}>
+                              {row.misconductType}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+                      </td>
+                    ))}
+                  </tr>
+                ) : null}
+
+                <tr className="border-t-4 border-[#5ea0b8]">
+                  {tableData.map((row, index) => (
+                    <td
+                      key={index}
+                      className="border border-[#5ea0b8] border-t-0 text-center px-4 py-2 min-w-[40px] h-[52px]"
+                    >
+                      <div className="flex flex-col items-center">
+                        {/* Show score */}
+                        <div className="font-semibold">
+                          {
+                           // Display individual player score if available
+                           (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)) ?
+                             (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : 
+                             // Otherwise show team score
+                             (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first')) ?
+                               (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
+                        </div>
+                        {/* Show misconduct below score if it exists */}
+                        {row.isMisconduct && row.misconductPlayer === (
+                          leftSideTeam === matchData.firstTeamName
+                            ? matchData.playerTwo
+                            : matchData.playerOne
+                        ) && (
+                          <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                            row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                            row.misconductType === "F" ? "bg-red-500 text-white" :
+                            row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                            row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                            row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                            row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                            row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                            row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                            row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                          }`}>
+                            {row.misconductType}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+
+                {matchData.playerFour != "" ? (
+                  <tr>
+                    {tableData.map((row, index) => (
+                      <td
+                        key={index}
+                        className="border border-[#5ea0b8] text-center px-4 py-2 h-[52px]"
+                      >
+                        <div className="flex flex-col items-center">
+                          {/* Show score */}
+                          <div className="font-semibold">
+                            {
+                             // Display individual player score if available
+                             (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerFour : matchData.playerThree)) ?
+                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
+                             // Otherwise show team score
+                             (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
+                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
+                          </div>
+                          {/* Show misconduct below score if it exists */}
+                          {row.isMisconduct && row.misconductPlayer === (
+                            leftSideTeam === matchData.firstTeamName
+                              ? matchData.playerFour
+                              : matchData.playerThree
+                          ) && (
+                            <div className={`text-sm font-bold mt-1 px-1 rounded ${
+                              row.misconductType === "W" ? "bg-yellow-400 text-yellow-700" :
+                              row.misconductType === "F" ? "bg-red-500 text-white" :
+                              row.misconductType === "R" ? "bg-blue-200 text-blue-700" :
+                              row.misconductType === "S" ? "bg-green-200 text-green-700" :
+                              row.misconductType === "O" ? "bg-purple-200 text-purple-700" :
+                              row.misconductType === "I" ? "bg-orange-200 text-orange-700" :
+                              row.misconductType === "DIS" ? "bg-slate-700 text-white" :
+                              row.misconductType === "RET" ? "bg-blue-200 text-blue-700" :
+                              row.misconductType === "C" ? "bg-green-200 text-green-700" : ""
+                            }`}>
+                              {row.misconductType}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

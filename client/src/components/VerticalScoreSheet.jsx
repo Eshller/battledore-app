@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useService } from "../ContextAPI/axios";
 import io from "socket.io-client";
 
-const socket = io(`${import.meta.env.VITE_SERVER}`);
+// Don't create socket instance at module level
+// const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 function VerticalScoreSheet() {
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
-
   const [tableData, setTableData] = useState([]);
+  // Create socket reference
+  const socketRef = useRef(null);
 
   useEffect(() => {
     getMatchData(gameId.id);
@@ -29,13 +31,40 @@ function VerticalScoreSheet() {
   }, [matchData]);
 
   useEffect(() => {
+    // Create socket instance on component mount
+    if (!socketRef.current) {
+      console.log("Creating new socket connection in VerticalScoreSheet");
+      socketRef.current = io(`${import.meta.env.VITE_SERVER}`);
+    }
+    
+    const socket = socketRef.current;
+
     socket.on("score_updated", (data) => {
-      if (data.status === "start") {
+      // Check for both matchId and gameId in the data
+      const matchIdToCheck = data.matchId || data.gameId;
+      
+      if (gameId.id === matchIdToCheck) {
+        console.log("Received score update in VerticalScoreSheet:", data);
         setTableData((prev) => [data, ...prev]);
       }
     });
+
     return () => {
-      socket.off("score_updated");
+      console.log("Cleaning up score update listeners in VerticalScoreSheet");
+      if (socketRef.current) {
+        socketRef.current.off("score_updated");
+      }
+    };
+  }, [gameId.id]);
+
+  // Add an effect to clean up the socket connection when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        console.log("Disconnecting socket in VerticalScoreSheet");
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, []);
 
