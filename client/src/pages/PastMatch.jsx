@@ -80,9 +80,11 @@ function PastMatch() {
 									{myData.isOperator && (
 										<div className="flex items-start">
 											<button
-												onClick={() =>
-													removeMatch(event?.eventDetails?._id, event?._id)
-												}
+												onClick={() => {
+													if (window.confirm('Are you sure you want to delete this match?')) {
+														removeMatch(event?.eventDetails?._id, event?._id);
+													}
+												}}
 												className="p-1.5 hover:bg-red-500/20 rounded-full transition-colors"
 											>
 												<svg

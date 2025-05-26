@@ -92,7 +92,7 @@ function ScorePage() {
 	const timerIntervalRef = useRef(null);
 	const [showInterval, setShowInterval] = useState(false);
 	const [intervalTeam, setIntervalTeam] = useState(null);
-	const [intervalTimeLeft, setIntervalTimeLeft] = useState(120); // 2 minutes in seconds
+	const [intervalTimeLeft, setIntervalTimeLeft] = useState(60); // 1 minute in seconds
 	const intervalTimerRef = useRef(null);
 	// Add new state variables for match/game point
 	const [matchPoint, setMatchPoint] = useState(null); // 1 for team 1, 2 for team 2, null for no match point
@@ -451,9 +451,12 @@ function ScorePage() {
 		}
 	};
 
+	// Add a new state variable to track if interval has been shown for this match
+	const [intervalShown, setIntervalShown] = useState(false);
+
 	const checkForInterval = (team, score) => {
-		// Don't trigger interval if it's already showing
-		if (showInterval) return;
+		// Don't trigger interval if it's already showing or has been shown before
+		if (showInterval || intervalShown) return;
 
 		// Check if we've reached the interval point based on match total points
 		const intervalPoint = matchData?.totalPoints === 15 ? 8 : 11;
@@ -469,13 +472,14 @@ function ScorePage() {
 			// Show the interval UI
 			setIntervalTeam(team);
 			setShowInterval(true);
-			setIntervalTimeLeft(120); // Reset interval timer to 2 minutes
+			setIntervalShown(true); // Mark that interval has been shown for this match
+			setIntervalTimeLeft(60); // Reset interval timer to 1 minute
 
 			// Emit interval start event to sync with other clients
 			socket.emit("interval_start", {
 				matchId: gameId.id,
 				team: team,
-				timeLeft: 120,
+				timeLeft: 60,
 			});
 
 			// Start interval timer
@@ -899,6 +903,7 @@ function ScorePage() {
 		setMatchTime(0);
 		setShowInterval(false);
 		setIntervalTeam(null);
+		setIntervalShown(false); // Reset interval shown state
 		setMatchPoint(null);
 		setShowWinAnimation(false);
 		setWinningTeam(null);
@@ -1359,7 +1364,7 @@ function ScorePage() {
 		setShowInterval(false);
 
 		// Reset interval time for next use
-		setIntervalTimeLeft(120);
+		setIntervalTimeLeft(60);
 
 		// Set post-interval state
 		setIsPostInterval(true);

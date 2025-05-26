@@ -298,9 +298,15 @@ export const BackendProvider = ({ children }) => {
 				seconds: parseInt(match.matchTime?.seconds) || 0
 			};
 
+			// Ensure umpire field is properly set from umpireId if needed
+			if (!match.umpire && match.umpireId) {
+				match.umpire = match.umpireId;
+			}
+
 			console.log('Processed match data:', {
 				id: match._id,
-				time: match.matchTime
+				time: match.matchTime,
+				umpire: match.umpire || match.umpireId || 'Not assigned'
 			});
 
 			setMatchData(match);

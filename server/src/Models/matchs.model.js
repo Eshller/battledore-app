@@ -21,6 +21,14 @@ const matSchema = new Schema(
       type: String,
       default: "",
     },
+    matchNumber: {
+      type: String,
+      default: "",
+    },
+    matchOrder: {
+      type: Number,
+      default: 0,
+    },
     typeOfMatch: {
       type: String,
       enum: [
@@ -110,6 +118,16 @@ const matSchema = new Schema(
       default: false,
     },
     referee: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    umpire: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    umpireId: {
       type: String,
       required: true,
       trim: true,

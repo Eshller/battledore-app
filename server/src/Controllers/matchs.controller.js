@@ -84,8 +84,13 @@ const createMatch = async (req, res) => {
       return res.status(404).json({ message: "Event not found" });
     }
 
+    // Get the count of existing matches for this event to determine the match order
+    const matchCount = await Match.countDocuments({ eventDetails: event._id });
+    const matchOrder = matchCount + 1;
+    const matchNumber = `${event.eventTitle.substring(0, 3).toUpperCase()}-${matchOrder}`;
+
     const newMatch = new Match({
-      eventDetails,
+      eventDetails: event._id,
       typeOfMatch,
       firstTeamName: firstTeamName || playerOne,
       secondTeamName: secondTeamName || playerTwo,
@@ -96,6 +101,10 @@ const createMatch = async (req, res) => {
       matchDate,
       totalPoints: totalPoints || 21,
       referee: umpire.username,
+      umpire: umpire.username,
+      umpireId: umpireId,
+      matchOrder: matchOrder,
+      matchNumber: matchNumber,
     });
 
     const createdMatch = await newMatch.save();
