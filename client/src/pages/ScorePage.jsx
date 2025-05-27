@@ -2112,26 +2112,141 @@ function ScorePage() {
 
 					{/* Court */}
 					<div className="">
-						<div className="h-[10rem] sm:h-[14rem] md:h-[20rem] lg:h-[23rem] xl:h-[25rem] 2xl:h-[30rem] bg-green-600 flex shadow-lg relative">
-							{/* Court lines */}
-							<div className="absolute inset-0 flex">
-								{/* Vertical center line */}
-								<div className="w-[2px] h-full bg-white mx-auto"></div>
+						<div className="h-[10rem] sm:h-[14rem] md:h-[20rem] lg:h-[23rem] xl:h-[25rem] 2xl:h-[30rem] relative">
+							{/* Court background image */}
+							<img 
+								src="/badminton_court.jpg" 
+								alt="Badminton Court" 
+								className="w-full h-full object-cover object-center rounded-lg"
+							/>
 
-								{/* Horizontal lines */}
-								<div className="absolute top-1/4 w-full h-[2px] bg-white"></div>
-								<div className="absolute top-3/4 w-full h-[2px] bg-white"></div>
+							{/* Left side of the court - Player names */}
+							<div className="absolute left-0 top-0 w-1/2 h-full text-white flex flex-col justify-evenly items-center">
+								{matchData?.firstTeamName === matchData?.receiver ? (
+									<>
+										{/* First team on left side */}
+										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+											<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+												{matchData?.playerOne}
+											</h1>
+											<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+												{(matchData?.firstTeamName && matchData?.secondTeamName && 
+													matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+													`(${matchData?.firstTeamName})` : 
+													matchData?.firstTeamName}
+											</p>
+										</div>
+										{matchData?.playerThree && (
+											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+												<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+													{matchData?.playerThree}
+												</h1>
+												<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+													{(matchData?.firstTeamName && matchData?.secondTeamName && 
+														matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+														`(${matchData?.firstTeamName})` : 
+														matchData?.firstTeamName}
+												</p>
+											</div>
+										)}
+									</>
+								) : (
+									<>
+										{/* Second team on left side */}
+										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+											<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+												{matchData?.playerTwo}
+											</h1>
+											<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+												{(matchData?.firstTeamName && matchData?.secondTeamName && 
+													matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+													`(${matchData?.secondTeamName})` : 
+													matchData?.secondTeamName}
+											</p>
+										</div>
+										{matchData?.playerFour && (
+											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+												<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+													{matchData?.playerFour}
+												</h1>
+												<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+													{(matchData?.firstTeamName && matchData?.secondTeamName && 
+														matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+														`(${matchData?.secondTeamName})` : 
+														matchData?.secondTeamName}
+												</p>
+											</div>
+										)}
+									</>
+								)}
+							</div>
 
-								{/* Service court lines */}
-								<div className="absolute left-1/4 top-0 w-[2px] h-full bg-white"></div>
-								<div className="absolute left-3/4 top-0 w-[2px] h-full bg-white"></div>
+							{/* Right side of the court - Player names */}
+							<div className="absolute right-0 top-0 w-1/2 h-full text-white flex flex-col justify-evenly items-center">
+								{matchData?.firstTeamName === matchData?.receiver ? (
+									<>
+										{/* Second team on right side */}
+										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+											<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+												{matchData?.playerTwo}
+											</h1>
+											<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+												{(matchData?.firstTeamName && matchData?.secondTeamName && 
+													matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+													`(${matchData?.secondTeamName})` : 
+													matchData?.secondTeamName}
+											</p>
+										</div>
+										{matchData?.playerFour && (
+											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+												<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+													{matchData?.playerFour}
+												</h1>
+												<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+													{(matchData?.firstTeamName && matchData?.secondTeamName && 
+														matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+														`(${matchData?.secondTeamName})` : 
+														matchData?.secondTeamName}
+												</p>
+											</div>
+										)}
+									</>
+								) : (
+									<>
+										{/* First team on right side */}
+										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+											<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+												{matchData?.playerOne}
+											</h1>
+											<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+												{(matchData?.firstTeamName && matchData?.secondTeamName && 
+													matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+													`(${matchData?.firstTeamName})` : 
+													matchData?.firstTeamName}
+											</p>
+										</div>
+										{matchData?.playerThree && (
+											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
+												<h1 className="text-xl xl:text-3xl font-semibold drop-shadow-lg">
+													{matchData?.playerThree}
+												</h1>
+												<p className="text-xl md:text-3xl xl:text-[3rem] font-bold drop-shadow-lg">
+													{(matchData?.firstTeamName && matchData?.secondTeamName && 
+														matchData?.firstTeamName.trim() !== '' && matchData?.secondTeamName.trim() !== '') ? 
+														`(${matchData?.firstTeamName})` : 
+														matchData?.firstTeamName}
+												</p>
+											</div>
+										)}
+									</>
+								)}
 							</div>
 
 							{/* Score buttons for individual players on left side */}
 							{matchData?.playerThree && matchData?.playerThree !== "" ? (
-								<div className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] flex flex-col gap-4">
+								<div className="absolute top-1/2 transform -translate-y-1/2 -left-40 flex flex-col gap-8 md:gap-12 lg:gap-16">
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
 												matchData?.firstTeamName === matchData?.receiver
@@ -2147,7 +2262,7 @@ function ScorePage() {
 										Score
 									</button>
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
 												matchData?.firstTeamName === matchData?.receiver
@@ -2165,7 +2280,7 @@ function ScorePage() {
 								</div>
 							) : (
 								<button
-									className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
+									className="absolute top-1/2 transform -translate-y-1/2 -left-40 p-4 xl:p-6 rounded-2xl text-2xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg backdrop-blur-sm font-semibold"
 									onClick={() => {
 										const player =
 											matchData?.firstTeamName === matchData?.receiver
@@ -2179,114 +2294,16 @@ function ScorePage() {
 								</button>
 							)}
 
-							{/* Left side of the court */}
-							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
-								{matchData?.firstTeamName === matchData?.receiver ? (
-									<>
-										{/* First team on left side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerOne}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.firstTeamName})
-											</p>
-										</div>
-										{matchData?.playerThree && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerThree}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.firstTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								) : (
-									<>
-										{/* Second team on left side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerTwo}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.secondTeamName})
-											</p>
-										</div>
-										{matchData?.playerFour && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerFour}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.secondTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								)}
-							</div>
-
-							{/* Right side of the court */}
-							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
-								{matchData?.firstTeamName === matchData?.receiver ? (
-									<>
-										{/* Second team on right side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerTwo}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.secondTeamName})
-											</p>
-										</div>
-										{matchData?.playerFour && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerFour}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.secondTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								) : (
-									<>
-										{/* First team on right side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerOne}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.firstTeamName})
-											</p>
-										</div>
-										{matchData?.playerThree && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerThree}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.firstTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								)}
-							</div>
-
-							{/* Score buttons for individual players on right side */}
+							{/* Right side score buttons */}
 							{matchData?.playerFour && matchData?.playerFour !== "" ? (
-								<div className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] flex flex-col gap-4">
+								<div className="absolute top-1/2 transform -translate-y-1/2 -right-40 flex flex-col gap-8 md:gap-12 lg:gap-16">
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
 												matchData?.firstTeamName === matchData?.receiver
-													? matchData?.playerTwo
-													: matchData?.playerOne;
+														? matchData?.playerTwo
+														: matchData?.playerOne;
 											handleButtonClick("right", player);
 										}}
 										disabled={!matchStarted}
@@ -2297,12 +2314,12 @@ function ScorePage() {
 										Score
 									</button>
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
 												matchData?.firstTeamName === matchData?.receiver
-													? matchData?.playerFour
-													: matchData?.playerThree;
+														? matchData?.playerFour
+														: matchData?.playerThree;
 											handleButtonClick("right", player);
 										}}
 										disabled={!matchStarted}
@@ -2315,16 +2332,16 @@ function ScorePage() {
 								</div>
 							) : (
 								<button
-									className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
+									className="absolute top-1/2 transform -translate-y-1/2 -right-40 p-4 xl:p-6 rounded-2xl text-2xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg backdrop-blur-sm font-semibold"
 									onClick={() => {
 										const player =
 											matchData?.firstTeamName === matchData?.receiver
-												? matchData?.playerTwo
-												: matchData?.playerOne;
+													? matchData?.playerTwo
+													: matchData?.playerOne;
 										handleButtonClick("right", player);
 									}}
 									disabled={!matchStarted}
-								>
+									>
 									Score
 								</button>
 							)}

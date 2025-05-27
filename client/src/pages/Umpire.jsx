@@ -22,14 +22,21 @@ function Umpire() {
     rightTeam: "", // Keeping variable name for backend compatibility
   });
 
-  // Check if this is a team match or individual match
-  const isTeamMatch = !!(match?.firstTeamName && match?.secondTeamName);
+  // Check if this is a team match (only true if actual team names are provided)
+  const isTeamMatch = !!(match?.firstTeamName?.trim() && match?.secondTeamName?.trim());
   
   // Check if this is a doubles match
   const isDoublesMatch = match?.typeOfMatch?.toLowerCase().includes('doubles');
   
+  // Check if this is a singles match
+  const isSinglesMatch = match?.typeOfMatch?.toLowerCase().includes('singles');
+  
   // Determine if we should show team terminology
-  const showTeamTerminology = isTeamMatch || isDoublesMatch;
+  // Only show team terminology if actual team names are present
+  const showTeamTerminology = isTeamMatch;
+
+  // Determine if this is a singles match with no team names (individuals)
+  const isIndividualSingles = isSinglesMatch && !isTeamMatch;
 
   // Get players for selection
   const getPlayers = (side) => {
@@ -180,22 +187,20 @@ function Umpire() {
                 <span className="text-[#B1D848]">START</span> MATCH
               </h1>
               <p className="opacity-80">Type of match : {match?.typeOfMatch}</p>
-              {showTeamTerminology ? (
-                match?.firstTeamName && match?.secondTeamName ? (
-                  <p className="opacity-80">
-                    Teams : {match?.firstTeamName} vs {match?.secondTeamName}
-                  </p>
-                ) : (
-                  <p className="opacity-80">
-                    Teams : {match?.playerOne}{match?.playerThree ? " & " + match?.playerThree : ""} vs {match?.playerTwo}{match?.playerFour ? " & " + match?.playerFour : ""}
-                  </p>
-                )
+              {isTeamMatch ? (
+                <p className="opacity-80">
+                  Teams : {match?.firstTeamName} vs {match?.secondTeamName}
+                </p>
+              ) : isDoublesMatch ? (
+                <p className="opacity-80">
+                  Players : {match?.playerOne}{match?.playerThree ? " & " + match?.playerThree : ""} vs {match?.playerTwo}{match?.playerFour ? " & " + match?.playerFour : ""}
+                </p>
               ) : (
                 <p className="opacity-80">
                   Players : {match?.playerOne} vs {match?.playerTwo}
                 </p>
               )}
-              {showTeamTerminology && (
+              {isTeamMatch ? (
                 <>
                   <p className="opacity-80">
                     First team player's name : {match?.playerOne}
@@ -206,7 +211,7 @@ function Umpire() {
                     {match?.playerFour ? " & " + match?.playerFour : null}
                   </p>
                 </>
-              )}
+              ) : null}
               <p className="opacity-80">
                 Total Points : {match?.totalPoints || 21}
               </p>
@@ -240,7 +245,7 @@ function Umpire() {
                     value={gameState.rightTeam}
                     onChange={handleChange}
                     onClick={() => setRightSideOption((prev) => !prev)}
-                    placeholder={showTeamTerminology ? "Team on your right" : "Player on your right"}
+                    placeholder={isTeamMatch ? "Team on your right" : isDoublesMatch ? "Players on your right" : "Player on your right"}
                     className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
                   />
                   {rightSideOption && (
@@ -267,7 +272,7 @@ function Umpire() {
                     value={gameState.server}
                     onChange={handleChange}
                     onClick={() => setServerOptions((prev) => !prev)}
-                    placeholder="Server Player"
+                    placeholder="Server"
                     className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
                   />
                   {serverOptions && (
@@ -294,7 +299,7 @@ function Umpire() {
                     value={gameState.receiver}
                     onChange={handleChange}
                     onClick={() => setReceiverOptions((prev) => !prev)}
-                    placeholder="Receiver Player"
+                    placeholder="Receiver"
                     className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
                   />
                   {receiverOptions && (

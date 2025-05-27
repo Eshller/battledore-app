@@ -92,8 +92,8 @@ const createMatch = async (req, res) => {
     const newMatch = new Match({
       eventDetails: event._id,
       typeOfMatch,
-      firstTeamName: firstTeamName || playerOne,
-      secondTeamName: secondTeamName || playerTwo,
+      firstTeamName: firstTeamName || "",
+      secondTeamName: secondTeamName || "",
       playerOne,
       playerTwo,
       playerThree,
