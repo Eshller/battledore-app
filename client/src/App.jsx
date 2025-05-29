@@ -38,7 +38,7 @@ function App() {
                     </div>
                   </main>
                   <footer className="text-center">
-                    <div className="opacity-50 text-5xl md:text-7xl xl:text-9xl select-none">
+                    <div className="opacity-50 text-5xl md:text-7xl xl:text-9xl select-none z-0 relative">
                       <Watermark />
                     </div>
                     <div className="text-white font-inter text-[0.75rem] md:text-[1rem] tracking-widest">
