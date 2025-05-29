@@ -11,6 +11,7 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
   const gameId = useParams();
   const [isScorePage, setIsScorePage] = useState(false);
   const [tableData, setTableData] = useState([]);
+  const [isDoublesMatch, setIsDoublesMatch] = useState(false);
   const prevMisconductsRef = useRef(misconducts);
   // Create socket reference
   const socketRef = useRef(null);
@@ -128,12 +129,19 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
     const initializeTable = async () => {
       if (!matchData) return;
 
+      // Check if this is a doubles match
+      const isDoubles = matchData.typeOfMatch?.toLowerCase().includes('doubles') || 
+                       (matchData.playerThree && matchData.playerThree !== '' && 
+                        matchData.playerFour && matchData.playerFour !== '');
+      setIsDoublesMatch(isDoubles);
+
       const firstTeamName = matchData.firstTeamName;
       const secondTeamName = matchData.secondTeamName;
       
       // Use scores prop if provided and not on score page, otherwise use matchData.scores
       // This ensures that on the score page, we always use matchData.scores for real-time updates
-      const scoreData = (!isScorePage && scores.length > 0) ? scores : (matchData.scores || []);
+      // The problem was with scores.length > 0 check which fails when scores is empty array
+      const scoreData = isScorePage ? (matchData.scores || []) : (scores || matchData.scores || []);
       
       // Don't use scores with zero values (0-0)
       const filteredScoreData = scoreData.filter(score => 
@@ -150,6 +158,23 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
               ? 'second'
               : 'none';
 
+        // For doubles matches, try to determine which player scored if not provided
+        let scoringPlayer = score.scoringPlayer;
+        
+        // If we're in a doubles match but don't have a scoring player, assign one based on team
+        const isDoubles = matchData.typeOfMatch?.toLowerCase().includes('doubles') || 
+                         (matchData.playerThree && matchData.playerThree !== '' && 
+                          matchData.playerFour && matchData.playerFour !== '');
+        
+        if (isDoubles && !scoringPlayer && scoringTeam !== 'none') {
+          // Randomly assign to one of the team members for display purposes
+          if (scoringTeam === 'first') {
+            scoringPlayer = Math.random() < 0.5 ? matchData.playerOne : matchData.playerThree;
+          } else {
+            scoringPlayer = Math.random() < 0.5 ? matchData.playerTwo : matchData.playerFour;
+          }
+        }
+
         return {
           firstTeamScore: score.firstTeamScore,
           secondTeamScore: score.secondTeamScore,
@@ -160,8 +185,8 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
           timestamp: score.createdAt || score.timestamp || new Date().toISOString(),
           numberOfShuttlecock: score.numberOfShuttlecock,
           isMisconduct: false,
-          scoringPlayer: score.scoringPlayer,
-          individualScore: score.individualScore || false
+          scoringPlayer: scoringPlayer,
+          individualScore: score.individualScore || isDoubles
         };
       });
 
@@ -401,12 +426,25 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                         {/* Show score */}
                         <div className="font-semibold">
                           {
-                           // Display individual player score if available
-                           (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerOne : matchData.playerTwo)) ?
-                            (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
-                           // Otherwise show team score
-                           (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
-                            (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
+                           // For doubles matches, show individual player scores
+                           isDoublesMatch ?
+                             // For doubles, we show the team score if this player is on the scoring team
+                             (row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second') ?
+                               // Show the team score at this point if this player scored
+                               (row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData?.playerOne : matchData?.playerTwo) ?
+                                 (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : "") :
+                               "")
+                           :
+                             // For singles matches, show the team score progression
+                             (leftSideTeam === matchData.firstTeamName ? 
+                               (index === 0 ? 
+                                 (parseInt(row.firstTeamScore) > 0 ? row.firstTeamScore : '') : 
+                                 (parseInt(row.firstTeamScore) !== parseInt(tableData[index-1].firstTeamScore) ? row.firstTeamScore : ''))
+                               : 
+                               (index === 0 ? 
+                                 (parseInt(row.secondTeamScore) > 0 ? row.secondTeamScore : '') : 
+                                 (parseInt(row.secondTeamScore) !== parseInt(tableData[index-1].secondTeamScore) ? row.secondTeamScore : '')))
+                          }
                         </div>
                         {/* Show misconduct below score if it exists */}
                         {row.isMisconduct && row.misconductPlayer === (
@@ -444,12 +482,25 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                           {/* Show score */}
                           <div className="font-semibold">
                             {
-                             // Display individual player score if available
-                             (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerThree : matchData.playerFour)) ?
-                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
-                             // Otherwise show team score
-                             (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
-                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
+                             // For doubles matches, show individual player scores
+                             isDoublesMatch ?
+                               // For doubles, we show the team score if this player is on the scoring team
+                               (row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second') ?
+                                 // Show the team score at this point if this player scored
+                                 (row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData?.playerThree : matchData?.playerFour) ?
+                                   (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : "") :
+                                 "")
+                             :
+                               // For singles matches, show the team score progression
+                               (leftSideTeam === matchData.firstTeamName ? 
+                                 (index === 0 ? 
+                                   (parseInt(row.firstTeamScore) > 0 ? row.firstTeamScore : '') : 
+                                   (parseInt(row.firstTeamScore) !== parseInt(tableData[index-1].firstTeamScore) ? row.firstTeamScore : ''))
+                                 : 
+                                 (index === 0 ? 
+                                   (parseInt(row.secondTeamScore) > 0 ? row.secondTeamScore : '') : 
+                                   (parseInt(row.secondTeamScore) !== parseInt(tableData[index-1].secondTeamScore) ? row.secondTeamScore : '')))
+                            }
                           </div>
                           {/* Show misconduct below score if it exists */}
                           {row.isMisconduct && row.misconductPlayer === (
@@ -487,12 +538,25 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                         {/* Show score */}
                         <div className="font-semibold">
                           {
-                           // Display individual player score if available
-                           (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerTwo : matchData.playerOne)) ?
-                             (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : 
-                             // Otherwise show team score
-                             (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first')) ?
-                               (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : ''}
+                           // For doubles matches, show individual player scores
+                           isDoublesMatch ?
+                             // For doubles, we show the team score if this player is on the scoring team
+                             (row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first') ?
+                               // Show the team score at this point if this player scored
+                               (row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData?.playerTwo : matchData?.playerOne) ?
+                                 (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : "") :
+                               "")
+                           :
+                             // For singles matches, show the team score progression
+                             (leftSideTeam === matchData.firstTeamName ? 
+                               (index === 0 ? 
+                                 (parseInt(row.secondTeamScore) > 0 ? row.secondTeamScore : '') : 
+                                 (parseInt(row.secondTeamScore) !== parseInt(tableData[index-1].secondTeamScore) ? row.secondTeamScore : ''))
+                               : 
+                               (index === 0 ? 
+                                 (parseInt(row.firstTeamScore) > 0 ? row.firstTeamScore : '') : 
+                                 (parseInt(row.firstTeamScore) !== parseInt(tableData[index-1].firstTeamScore) ? row.firstTeamScore : '')))
+                          }
                         </div>
                         {/* Show misconduct below score if it exists */}
                         {row.isMisconduct && row.misconductPlayer === (
@@ -530,12 +594,25 @@ const ScoreSheet = ({ selectedPlayer, misconduct, misconducts = [], onMisconduct
                           {/* Show score */}
                           <div className="font-semibold">
                             {
-                             // Display individual player score if available
-                             (row.individualScore && row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData.playerFour : matchData.playerThree)) ?
-                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : 
-                             // Otherwise show team score
-                             (!row.individualScore && row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'first' : 'second')) ?
-                              (leftSideTeam === matchData.firstTeamName ? row.firstTeamScore : row.secondTeamScore) : ''}
+                             // For doubles matches, show individual player scores
+                             isDoublesMatch ?
+                               // For doubles, we show the team score if this player is on the scoring team
+                               (row.scoringTeam === (leftSideTeam === matchData.firstTeamName ? 'second' : 'first') ?
+                                 // Show the team score at this point if this player scored
+                                 (row.scoringPlayer === (leftSideTeam === matchData.firstTeamName ? matchData?.playerFour : matchData?.playerThree) ?
+                                   (leftSideTeam === matchData.firstTeamName ? row.secondTeamScore : row.firstTeamScore) : "") :
+                                 "")
+                             :
+                               // For singles matches, show the team score progression
+                               (leftSideTeam === matchData.firstTeamName ? 
+                                 (index === 0 ? 
+                                   (parseInt(row.secondTeamScore) > 0 ? row.secondTeamScore : '') : 
+                                   (parseInt(row.secondTeamScore) !== parseInt(tableData[index-1].secondTeamScore) ? row.secondTeamScore : ''))
+                                 : 
+                                 (index === 0 ? 
+                                   (parseInt(row.firstTeamScore) > 0 ? row.firstTeamScore : '') : 
+                                   (parseInt(row.firstTeamScore) !== parseInt(tableData[index-1].firstTeamScore) ? row.firstTeamScore : '')))
+                            }
                           </div>
                           {/* Show misconduct below score if it exists */}
                           {row.isMisconduct && row.misconductPlayer === (
