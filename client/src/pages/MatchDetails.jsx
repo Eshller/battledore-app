@@ -373,24 +373,26 @@ function MatchDetails() {
 								<p className="text-lg font-semibold">{matchData.totalPoints || 21}</p>
 							</div>
 							<div className="bg-white/10 rounded-lg p-3">
-								<p className="text-sm opacity-70">First Team Players</p>
-								<p className="text-lg font-semibold">
-									{matchData.playerOne}
-									{matchData.playerThree && ` & ${matchData.playerThree}`}
-								</p>
-							</div>
-							<div className="bg-white/10 rounded-lg p-3">
-								<p className="text-sm opacity-70">Second Team Players</p>
-								<p className="text-lg font-semibold">
-									{matchData.playerTwo}
-									{matchData.playerFour && ` & ${matchData.playerFour}`}
-								</p>
-							</div>
-							<div className="bg-white/10 rounded-lg p-3">
 								<p className="text-sm opacity-70">Umpire</p>
 								<p className="text-lg font-semibold">
 									{matchData.umpire || matchData.umpireId || matchData.referee || "Not assigned"}
 								</p>
+							</div>
+							<div className="sm:col-span-2 grid sm:grid-cols-2 gap-3">
+								<div className="bg-white/10 rounded-lg p-3">
+									<p className="text-sm opacity-70">First Team Players</p>
+									<p className="text-lg font-semibold">
+										{matchData.playerOne}
+										{matchData.playerThree && ` & ${matchData.playerThree}`}
+									</p>
+								</div>
+								<div className="bg-white/10 rounded-lg p-3">
+									<p className="text-sm opacity-70">Second Team Players</p>
+									<p className="text-lg font-semibold">
+										{matchData.playerTwo}
+										{matchData.playerFour && ` & ${matchData.playerFour}`}
+									</p>
+								</div>
 							</div>
 						</div>
 					</div>
