@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useService } from "../ContextAPI/axios";
 import Watermark from "../components/Watermark";
+import { FiChevronDown, FiChevronUp } from "react-icons/fi";
 
 function Umpire() {
-  const Navigate = useNavigate();
+  const navigate = useNavigate();
   const location = useLocation();
   const { match } = location.state || {};
 
   const { startMatch } = useService();
-  const [teamOption, setTeamOption] = useState(false);
   const [serverOptions, setServerOptions] = useState(false);
   const [receiverOptions, setReceiverOptions] = useState(false);
   const [rightSideOption, setRightSideOption] = useState(false);
@@ -28,40 +28,12 @@ function Umpire() {
   // Check if this is a doubles match
   const isDoublesMatch = match?.typeOfMatch?.toLowerCase().includes('doubles');
   
-  // Check if this is a singles match
+  // Check if this is a singles match - used in conditional rendering
   const isSinglesMatch = match?.typeOfMatch?.toLowerCase().includes('singles');
   
-  // Determine if we should show team terminology
-  // Only show team terminology if actual team names are present
-  const showTeamTerminology = isTeamMatch;
+  // Note: Team terminology is determined by isTeamMatch
 
-  // Determine if this is a singles match with no team names (individuals)
-  const isIndividualSingles = isSinglesMatch && !isTeamMatch;
-
-  // Get players for selection
-  const getPlayers = (side) => {
-    if (!isTeamMatch) {
-      // For individual matches, just return all players
-      const players = [];
-      if (match?.playerOne) players.push(match.playerOne);
-      if (match?.playerTwo) players.push(match.playerTwo);
-      if (match?.playerThree) players.push(match.playerThree);
-      if (match?.playerFour) players.push(match.playerFour);
-      return players;
-    } else {
-      // For team matches, return players based on the team
-      if (side === match?.firstTeamName) {
-        return match?.playerThree 
-          ? [match?.playerOne, match?.playerThree] 
-          : [match?.playerOne];
-      } else if (side === match?.secondTeamName) {
-        return match?.playerFour 
-          ? [match?.playerTwo, match?.playerFour] 
-          : [match?.playerTwo];
-      }
-      return [];
-    }
-  };
+  // Note: Singles matches with no team names are handled using isSinglesMatch && !isTeamMatch
 
   function selectRightSide(value) {
     setGameState({
@@ -130,7 +102,7 @@ function Umpire() {
       const res = await startMatch(match?._id, reqDetail);
       res.data.message
         ? toast.success(res.data.message)
-        : toast.error(res.data.message);
+        : toast.error(res.data.error || "An error occurred");
 
       if (res.status === 201) {
         setGameState({
@@ -139,7 +111,7 @@ function Umpire() {
           receiver: "",
           rightTeam: "",
         });
-        Navigate(`/scorepage/${match?._id}`);
+        navigate(`/scorepage/${match?._id}`);
       }
     }
   };
@@ -183,37 +155,36 @@ function Umpire() {
               className="w-full max-h-[300px] lg:min-h-[500px] flex flex-col gap-2 md:gap-5 justify-center p-3 md:p-5 lg:p-10 text-sm sm:text-lg xl:text-xl 2xl:text-2xl font-medium"
             >
               <h1 className="text-white font-bold text-3xl sm:text-5xl 2xl:text-6xl">
-                {" "}
                 <span className="text-[#B1D848]">START</span> MATCH
               </h1>
-              <p className="opacity-80">Type of match : {match?.typeOfMatch}</p>
+              <p className="opacity-80">Type of match: {match?.typeOfMatch}</p>
               {isTeamMatch ? (
                 <p className="opacity-80">
-                  Teams : {match?.firstTeamName} vs {match?.secondTeamName}
+                  Teams: {match?.firstTeamName} vs {match?.secondTeamName}
                 </p>
               ) : isDoublesMatch ? (
                 <p className="opacity-80">
-                  Players : {match?.playerOne}{match?.playerThree ? " & " + match?.playerThree : ""} vs {match?.playerTwo}{match?.playerFour ? " & " + match?.playerFour : ""}
+                  Players: {match?.playerOne}{match?.playerThree ? ` & ${match?.playerThree}` : ""} vs {match?.playerTwo}{match?.playerFour ? ` & ${match?.playerFour}` : ""}
                 </p>
-              ) : (
+              ) : isSinglesMatch ? (
                 <p className="opacity-80">
-                  Players : {match?.playerOne} vs {match?.playerTwo}
+                  Players: {match?.playerOne} vs {match?.playerTwo}
                 </p>
-              )}
+              ) : null}
               {isTeamMatch ? (
                 <>
                   <p className="opacity-80">
-                    First team player's name : {match?.playerOne}
-                    {match?.playerThree ? " & " + match?.playerThree : null}
+                    First team player&apos;s name: {match?.playerOne}
+                    {match?.playerThree ? ` & ${match?.playerThree}` : null}
                   </p>
                   <p className="opacity-80">
-                    Second team player's name : {match?.playerTwo}
-                    {match?.playerFour ? " & " + match?.playerFour : null}
+                    Second team player&apos;s name: {match?.playerTwo}
+                    {match?.playerFour ? ` & ${match?.playerFour}` : null}
                   </p>
                 </>
               ) : null}
               <p className="opacity-80">
-                Total Points : {match?.totalPoints || 21}
+                Total Points: {match?.totalPoints || 21}
               </p>
             </div>
             <div
@@ -225,100 +196,144 @@ function Umpire() {
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
-                  <input
-                    type="text"
-                    name="eventPlace"
-                    value={gameState.eventPlace}
-                    onChange={handleChange}
-                    placeholder="Court Number"
-                    className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                  />
+                  <div className="relative w-full">
+                    <input
+                      type="text"
+                      name="eventPlace"
+                      value={gameState.eventPlace}
+                      onChange={handleChange}
+                      placeholder="Court Number"
+                      className="bg-transparent outline-none border-none px-2 md:px-6 w-full placeholder:text-white text-medium md:text-lg lg:text-xl focus:placeholder:text-opacity-70 transition-all duration-200"
+                    />
+                  </div>
                 </div>
                 
                 {/* Player/Team on the right selection */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
-                  <input
-                    type="text"
-                    name="rightTeam"
-                    value={gameState.rightTeam}
-                    onChange={handleChange}
-                    onClick={() => setRightSideOption((prev) => !prev)}
-                    placeholder={isTeamMatch ? "Team on your right" : isDoublesMatch ? "Players on your right" : "Player on your right"}
-                    className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                  />
-                  {rightSideOption && (
-                    <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                      {getRightSideOptions().map((option, index) => (
-                        <React.Fragment key={index}>
-                          {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
-                          <p onClick={() => selectRightSide(option)}>
-                            {option}
-                          </p>
-                        </React.Fragment>
-                      ))}
+                  <div className="relative w-full">
+                    <div 
+                      className="flex items-center justify-between w-full cursor-pointer"
+                      onClick={() => setRightSideOption((prev) => !prev)}
+                    >
+                      <input
+                        type="text"
+                        name="rightTeam"
+                        value={gameState.rightTeam}
+                        onChange={handleChange}
+                        placeholder={isTeamMatch ? "Team on your right" : isDoublesMatch ? "Players on your right" : "Player on your right"}
+                        className="bg-transparent outline-none border-none px-2 md:px-6 w-full placeholder:text-white text-medium md:text-lg lg:text-xl cursor-pointer"
+                        readOnly
+                      />
+                      <div className="text-white mr-2">
+                        {rightSideOption ? <FiChevronUp size={20} /> : <FiChevronDown size={20} />}
+                      </div>
                     </div>
-                  )}
+                    
+                    {rightSideOption && (
+                      <div 
+                        className="absolute z-50 w-full mt-2 py-2 bg-white rounded-lg shadow-xl transition-all duration-200 ease-in-out"
+                      >
+                        {getRightSideOptions().map((option, index) => (
+                          <div 
+                            key={index} 
+                            className={`px-4 py-2 text-black hover:bg-blue-100 cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
+                            onClick={() => selectRightSide(option)}
+                          >
+                            {option}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Server Player Selection */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
-                  <input
-                    type="text"
-                    name="server"
-                    value={gameState.server}
-                    onChange={handleChange}
-                    onClick={() => setServerOptions((prev) => !prev)}
-                    placeholder="Server"
-                    className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                  />
-                  {serverOptions && (
-                    <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                      {getAllPlayers().map((player, index) => (
-                        <React.Fragment key={index}>
-                          {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
-                          <p onClick={() => selectServer(player)}>
-                            {player}
-                          </p>
-                        </React.Fragment>
-                      ))}
+                  <div className="relative w-full">
+                    <div 
+                      className="flex items-center justify-between w-full cursor-pointer"
+                      onClick={() => setServerOptions((prev) => !prev)}
+                    >
+                      <input
+                        type="text"
+                        name="server"
+                        value={gameState.server}
+                        onChange={handleChange}
+                        placeholder="Server"
+                        className="bg-transparent outline-none border-none px-2 md:px-6 w-full placeholder:text-white text-medium md:text-lg lg:text-xl cursor-pointer"
+                        readOnly
+                      />
+                      <div className="text-white mr-2">
+                        {serverOptions ? <FiChevronUp size={20} /> : <FiChevronDown size={20} />}
+                      </div>
                     </div>
-                  )}
+                    
+                    {serverOptions && (
+                      <div 
+                        className="absolute z-50 w-full mt-2 py-2 bg-white rounded-lg shadow-xl transition-all duration-200 ease-in-out max-h-48 overflow-y-auto"
+                      >
+                        {getAllPlayers().map((player, index) => (
+                          <div 
+                            key={index} 
+                            className={`px-4 py-2 text-black hover:bg-blue-100 cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
+                            onClick={() => selectServer(player)}
+                          >
+                            {player}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Receiver Player Selection */}
                 <div className="flex border-b-2 w-full md:w-3/4 gap-2 md:gap-5 relative">
                   <img src=".././ri_team-line.png" alt="icon" className="w-8" />
 
-                  <input
-                    type="text"
-                    name="receiver"
-                    value={gameState.receiver}
-                    onChange={handleChange}
-                    onClick={() => setReceiverOptions((prev) => !prev)}
-                    placeholder="Receiver"
-                    className="bg-transparent outline-none border-none px-2 md:px-6 w-3/4 placeholder:text-white text-medium md:text-lg lg:text-xl"
-                  />
-                  {receiverOptions && (
-                    <div className="p-4 cursor-pointer absolute shadow-2xl bg-white left-20 top-7 text-black rounded-xl font-medium text-xl z-50">
-                      {getAllPlayers().map((player, index) => (
-                        <React.Fragment key={index}>
-                          {index > 0 && <p className="border-b-[1px] border-slate-800"></p>}
-                          <p onClick={() => selectReceiver(player)}>
-                            {player}
-                          </p>
-                        </React.Fragment>
-                      ))}
+                  <div className="relative w-full">
+                    <div 
+                      className="flex items-center justify-between w-full cursor-pointer"
+                      onClick={() => setReceiverOptions((prev) => !prev)}
+                    >
+                      <input
+                        type="text"
+                        name="receiver"
+                        value={gameState.receiver}
+                        onChange={handleChange}
+                        placeholder="Receiver"
+                        className="bg-transparent outline-none border-none px-2 md:px-6 w-full placeholder:text-white text-medium md:text-lg lg:text-xl cursor-pointer"
+                        readOnly
+                      />
+                      <div className="text-white mr-2">
+                        {receiverOptions ? <FiChevronUp size={20} /> : <FiChevronDown size={20} />}
+                      </div>
                     </div>
-                  )}
+                    
+                    {receiverOptions && (
+                      <div 
+                        className="absolute z-50 w-full mt-2 py-2 bg-white rounded-lg shadow-xl transition-all duration-200 ease-in-out max-h-48 overflow-y-auto"
+                      >
+                        {getAllPlayers().map((player, index) => (
+                          <div 
+                            key={index} 
+                            className={`px-4 py-2 text-black hover:bg-blue-100 cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
+                            onClick={() => selectReceiver(player)}
+                          >
+                            {player}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <button
                 onClick={handleStartGame}
-                className="w-3/4 bg-white text-black font-inter font-bold py-3 rounded-2xl"
+                className="w-3/4 bg-white text-black font-inter font-bold py-3 rounded-2xl hover:bg-opacity-90 transition-all duration-200 ease-in-out transform hover:scale-[1.02] active:scale-[0.98]"
               >
                 Start match
               </button>
