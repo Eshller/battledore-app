@@ -152,22 +152,22 @@ function MatchDetails() {
 			
 			toast.info("Generating PDF, please wait...");
 			
-			// Create canvas from the container
+			// Create canvas from the container with optimized settings
 			const canvas = await html2canvas(pdfContainer, {
-				scale: 2,
+				scale: 1.5, // Reduced from 2 to optimize size
 				useCORS: true,
 				allowTaint: true,
-				backgroundColor: "#ffffff"
+				backgroundColor: "#ffffff",
+				logging: false, // Disable logging
+				letterRendering: false, // Disable letter rendering for better performance
 			});
-			
-			// Convert to image
-			const imgData = canvas.toDataURL("image/png");
 			
 			// Create PDF with landscape orientation
 			const pdf = new jsPDF({
 				orientation: "landscape",
 				unit: "mm",
-				format: "a4"
+				format: "a4",
+				compression: true // Enable compression
 			});
 			
 			const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -180,7 +180,11 @@ function MatchDetails() {
 			const imgX = (pdfWidth - imgWidth * ratio) / 2;
 			const imgY = (pdfHeight - imgHeight * ratio) / 2;
 			
-			pdf.addImage(imgData, "PNG", imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+			// Convert to image with compression
+			const imgData = canvas.toDataURL("image/jpeg", 0.75); // Use JPEG with 75% quality instead of PNG
+			
+			// Add the image to PDF with optimized settings
+			pdf.addImage(imgData, "JPEG", imgX, imgY, imgWidth * ratio, imgHeight * ratio, null, 'FAST');
 			
 			// Save the PDF
 			const eventTitle = matchData?.eventDetails?.eventTitle || "Match";
