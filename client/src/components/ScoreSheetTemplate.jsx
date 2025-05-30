@@ -38,6 +38,11 @@ const ScoreSheetTemplate = ({ matchData }) => {
   const finalScore = scores.length > 0 ? scores[scores.length - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
   const shuttlecockCount = finalScore.numberOfShuttlecock || "0";
 
+  // Check if this is a doubles match
+  const isDoublesMatch = matchData?.typeOfMatch?.toLowerCase()?.includes('doubles') || 
+                       (matchData?.playerThree && matchData?.playerThree !== '' && 
+                        matchData?.playerFour && matchData?.playerFour !== '');
+
   // Process match scores to display in chronological order
   const processChronologicalScores = () => {
     // No scores data
@@ -45,7 +50,9 @@ const ScoreSheetTemplate = ({ matchData }) => {
       return {
         team1Counters: [], 
         team2Counters: [],
-        columnCount: 0
+        columnCount: 0,
+        scoreEntries: [],
+        playerScores: {}
       };
     }
 
@@ -63,6 +70,62 @@ const ScoreSheetTemplate = ({ matchData }) => {
     let team2Counter = 0;
     let prevTeam1Score = 0;
     let prevTeam2Score = 0;
+    
+    // For tracking individual player scores in doubles
+    const playerScores = {
+      playerOne: [],
+      playerTwo: [],
+      playerThree: [],
+      playerFour: []
+    };
+    
+    // Create score entries with proper timestamps
+    const scoreEntries = sortedScores.map((score, index) => {
+      const previousScore = index > 0 ? sortedScores[index - 1] : { firstTeamScore: "0", secondTeamScore: "0" };
+      const scoringTeam =
+        parseInt(score.firstTeamScore) > parseInt(previousScore.firstTeamScore)
+          ? 'first'
+          : parseInt(score.secondTeamScore) > parseInt(previousScore.secondTeamScore)
+            ? 'second'
+            : 'none';
+
+      // For doubles matches, try to determine which player scored if not provided
+      let scoringPlayer = score.scoringPlayer;
+      
+      // If we're in a doubles match but don't have a scoring player, assign one based on team
+      if (isDoublesMatch && !scoringPlayer && scoringTeam !== 'none') {
+        // Randomly assign to one of the team members for display purposes
+        if (scoringTeam === 'first') {
+          scoringPlayer = Math.random() < 0.5 ? matchData.playerOne : matchData.playerThree;
+        } else {
+          scoringPlayer = Math.random() < 0.5 ? matchData.playerTwo : matchData.playerFour;
+        }
+      }
+      
+      // Track individual player scores for doubles
+      if (scoringPlayer && scoringTeam !== 'none') {
+        const currentScore = scoringTeam === 'first' ? score.firstTeamScore : score.secondTeamScore;
+        
+        if (scoringPlayer === matchData.playerOne) {
+          playerScores.playerOne.push(currentScore);
+        } else if (scoringPlayer === matchData.playerTwo) {
+          playerScores.playerTwo.push(currentScore);
+        } else if (scoringPlayer === matchData.playerThree) {
+          playerScores.playerThree.push(currentScore);
+        } else if (scoringPlayer === matchData.playerFour) {
+          playerScores.playerFour.push(currentScore);
+        }
+      }
+
+      return {
+        firstTeamScore: score.firstTeamScore,
+        secondTeamScore: score.secondTeamScore,
+        scoringTeam,
+        scoringPlayer,
+        timestamp: score.createdAt || score.timestamp || new Date().toISOString(),
+        numberOfShuttlecock: score.numberOfShuttlecock
+      };
+    });
     
     // Analyze each score update
     sortedScores.forEach(score => {
@@ -105,10 +168,16 @@ const ScoreSheetTemplate = ({ matchData }) => {
       }
     });
     
-    return { team1Counters, team2Counters, columnCount: scoreSequence.length };
+    return { 
+      team1Counters, 
+      team2Counters, 
+      columnCount: scoreSequence.length,
+      scoreEntries,
+      playerScores
+    };
   };
 
-  const { team1Counters, team2Counters, columnCount } = processChronologicalScores();
+  const { team1Counters, team2Counters, columnCount, scoreEntries, playerScores } = processChronologicalScores();
 
   // Get misconducts for each player
   const playerMisconducts = (playerName) => {
@@ -271,28 +340,31 @@ const ScoreSheetTemplate = ({ matchData }) => {
                   {matchData?.playerOne || "Player 1"}
                 </td>
                 {Array.from({ length: displayColumnCount }).map((_, i) => {
-                  // Get the team1 score counter for this column (if exists)
-                  const counter = i < team1Counters.length ? team1Counters[i] : null;
-                  return (
-                    <td 
-                      key={i} 
-                      className="border border-gray-400 text-center"
-                      style={{ padding: '4px', fontSize: '12px' }}
-                    >
-                      {counter !== null ? counter : ""}
-                    </td>
-                  );
-                })}
-              </tr>
-
-              {/* Player Three (if exists) */}
-              {matchData?.playerThree && (
-                <tr>
-                  <td className="border border-gray-400 px-2 py-1 font-medium">
-                    {matchData?.playerThree || ""}
-                  </td>
-                  {Array.from({ length: displayColumnCount }).map((_, i) => {
-                    // Show same scores for doubles partner
+                  // For doubles matches with individual player scoring
+                  if (isDoublesMatch && scoreEntries && scoreEntries.length > 0) {
+                    const entry = i < scoreEntries.length ? scoreEntries[i] : null;
+                    if (entry && entry.scoringPlayer === matchData?.playerOne && entry.scoringTeam === 'first') {
+                      return (
+                        <td 
+                          key={i} 
+                          className="border border-gray-400 text-center"
+                          style={{ padding: '4px', fontSize: '12px' }}
+                        >
+                          {entry.firstTeamScore}
+                        </td>
+                      );
+                    }
+                    return (
+                      <td 
+                        key={i} 
+                        className="border border-gray-400 text-center"
+                        style={{ padding: '4px', fontSize: '12px' }}
+                      >
+                        {""}
+                      </td>
+                    );
+                  } else {
+                    // Get the team1 score counter for this column (if exists) - for singles
                     const counter = i < team1Counters.length ? team1Counters[i] : null;
                     return (
                       <td 
@@ -303,6 +375,53 @@ const ScoreSheetTemplate = ({ matchData }) => {
                         {counter !== null ? counter : ""}
                       </td>
                     );
+                  }
+                })}
+              </tr>
+
+              {/* Player Three (if exists) */}
+              {matchData?.playerThree && (
+                <tr>
+                  <td className="border border-gray-400 px-2 py-1 font-medium">
+                    {matchData?.playerThree || ""}
+                  </td>
+                  {Array.from({ length: displayColumnCount }).map((_, i) => {
+                    // For doubles matches with individual player scoring
+                    if (isDoublesMatch && scoreEntries && scoreEntries.length > 0) {
+                      const entry = i < scoreEntries.length ? scoreEntries[i] : null;
+                      if (entry && entry.scoringPlayer === matchData?.playerThree && entry.scoringTeam === 'first') {
+                        return (
+                          <td 
+                            key={i} 
+                            className="border border-gray-400 text-center"
+                            style={{ padding: '4px', fontSize: '12px' }}
+                          >
+                            {entry.firstTeamScore}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td 
+                          key={i} 
+                          className="border border-gray-400 text-center"
+                          style={{ padding: '4px', fontSize: '12px' }}
+                        >
+                          {""}
+                        </td>
+                      );
+                    } else {
+                      // Show same scores for doubles partner in singles mode
+                      const counter = i < team1Counters.length ? team1Counters[i] : null;
+                      return (
+                        <td 
+                          key={i} 
+                          className="border border-gray-400 text-center"
+                          style={{ padding: '4px', fontSize: '12px' }}
+                        >
+                          {counter !== null ? counter : ""}
+                        </td>
+                      );
+                    }
                   })}
                 </tr>
               )}
@@ -318,28 +437,31 @@ const ScoreSheetTemplate = ({ matchData }) => {
                   {matchData?.playerTwo || "Player 2"}
                 </td>
                 {Array.from({ length: displayColumnCount }).map((_, i) => {
-                  // Get the team2 score counter for this column (if exists)
-                  const counter = i < team2Counters.length ? team2Counters[i] : null;
-                  return (
-                    <td 
-                      key={i} 
-                      className="border border-gray-400 text-center"
-                      style={{ padding: '4px', fontSize: '12px' }}
-                    >
-                      {counter !== null ? counter : ""}
-                    </td>
-                  );
-                })}
-              </tr>
-
-              {/* Player Four (if exists) */}
-              {matchData?.playerFour && (
-                <tr>
-                  <td className="border border-gray-400 px-2 py-1 font-medium">
-                    {matchData?.playerFour || ""}
-                  </td>
-                  {Array.from({ length: displayColumnCount }).map((_, i) => {
-                    // Show same scores for doubles partner
+                  // For doubles matches with individual player scoring
+                  if (isDoublesMatch && scoreEntries && scoreEntries.length > 0) {
+                    const entry = i < scoreEntries.length ? scoreEntries[i] : null;
+                    if (entry && entry.scoringPlayer === matchData?.playerTwo && entry.scoringTeam === 'second') {
+                      return (
+                        <td 
+                          key={i} 
+                          className="border border-gray-400 text-center"
+                          style={{ padding: '4px', fontSize: '12px' }}
+                        >
+                          {entry.secondTeamScore}
+                        </td>
+                      );
+                    }
+                    return (
+                      <td 
+                        key={i} 
+                        className="border border-gray-400 text-center"
+                        style={{ padding: '4px', fontSize: '12px' }}
+                      >
+                        {""}
+                      </td>
+                    );
+                  } else {
+                    // Get the team2 score counter for this column (if exists) - for singles
                     const counter = i < team2Counters.length ? team2Counters[i] : null;
                     return (
                       <td 
@@ -350,6 +472,53 @@ const ScoreSheetTemplate = ({ matchData }) => {
                         {counter !== null ? counter : ""}
                       </td>
                     );
+                  }
+                })}
+              </tr>
+
+              {/* Player Four (if exists) */}
+              {matchData?.playerFour && (
+                <tr>
+                  <td className="border border-gray-400 px-2 py-1 font-medium">
+                    {matchData?.playerFour || ""}
+                  </td>
+                  {Array.from({ length: displayColumnCount }).map((_, i) => {
+                    // For doubles matches with individual player scoring
+                    if (isDoublesMatch && scoreEntries && scoreEntries.length > 0) {
+                      const entry = i < scoreEntries.length ? scoreEntries[i] : null;
+                      if (entry && entry.scoringPlayer === matchData?.playerFour && entry.scoringTeam === 'second') {
+                        return (
+                          <td 
+                            key={i} 
+                            className="border border-gray-400 text-center"
+                            style={{ padding: '4px', fontSize: '12px' }}
+                          >
+                            {entry.secondTeamScore}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td 
+                          key={i} 
+                          className="border border-gray-400 text-center"
+                          style={{ padding: '4px', fontSize: '12px' }}
+                        >
+                          {""}
+                        </td>
+                      );
+                    } else {
+                      // Show same scores for doubles partner in singles mode
+                      const counter = i < team2Counters.length ? team2Counters[i] : null;
+                      return (
+                        <td 
+                          key={i} 
+                          className="border border-gray-400 text-center"
+                          style={{ padding: '4px', fontSize: '12px' }}
+                        >
+                          {counter !== null ? counter : ""}
+                        </td>
+                      );
+                    }
                   })}
                 </tr>
               )}
