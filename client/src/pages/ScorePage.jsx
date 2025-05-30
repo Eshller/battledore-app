@@ -505,6 +505,8 @@ function ScorePage() {
 
 	// Function to check for match point or game point
 	const checkForMatchPoint = () => {
+		if (!matchData) return; // Don't check if matchData isn't loaded
+
 		// Get current scores as integers
 		const team1Score = parseInt(teamOneScore);
 		const team2Score = parseInt(teamTwoScore);
@@ -549,6 +551,13 @@ function ScorePage() {
 			setMatchPoint(null);
 		}
 	};
+
+	// Add useEffect to check for match point when scores change
+	useEffect(() => {
+		if (matchStarted && matchData) {
+			checkForMatchPoint();
+		}
+	}, [teamOneScore, teamTwoScore, matchData, matchStarted]);
 
 	// Check if a team has won the match
 	const checkForWin = () => {
@@ -1888,19 +1897,7 @@ function ScorePage() {
 				</>
 			)}
 
-			{/* Match Point Indicator */}
-			{matchPoint && !showWinAnimation && (
-				<div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 z-40 animate-pulse">
-					<div className="bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg text-center">
-						<h2 className="text-xl font-bold">
-							{matchPoint === 1
-								? matchData?.firstTeamName
-								: matchData?.secondTeamName}
-							{" MATCH POINT"}
-						</h2>
-					</div>
-				</div>
-			)}
+			
 
 			{/* Win Animation */}
 			{showWinAnimation && (
@@ -2060,18 +2057,33 @@ function ScorePage() {
 				{/* Main Section */}
 				<div className="w-[85%] lg:w-[60%] m-auto h-auto bg-white pb-4 rounded-t-3xl">
 					{/* Score */}
-					<div className="px-10 text-[4rem] lg:text-[5rem] text-[#7cb6cb] flex justify-center gap-5 md:gap-10 items-center">
-						<span>
-							{matchData.rightTeam === matchData.firstTeamName
-								? teamTwoScore
-								: teamOneScore}
-						</span>
-						<span> - </span>
-						<span>
-							{matchData.rightTeam === matchData.firstTeamName
-								? teamOneScore
-								: teamTwoScore}
-						</span>
+					<div className="px-10 text-[4rem] lg:text-[5rem] text-[#7cb6cb] flex flex-col items-center">
+						<div className="flex justify-center gap-5 md:gap-10 items-center">
+							<span>
+								{matchData.rightTeam === matchData.firstTeamName
+									? teamTwoScore
+									: teamOneScore}
+							</span>
+							<span> - </span>
+							<span>
+								{matchData.rightTeam === matchData.firstTeamName
+									? teamOneScore
+									: teamTwoScore}
+							</span>
+						</div>
+						{/* Match Point Indicator */}
+						{matchPoint && !showWinAnimation && (
+							<div className="mt-2 animate-pulse">
+								<div className="bg-red-600 text-white px-6 py-2 rounded-lg shadow-lg text-center">
+									<h2 className="text-xl font-bold">
+										{matchPoint === 1
+											? matchData?.firstTeamName
+											: matchData?.secondTeamName}
+										{" MATCH POINT"}
+									</h2>
+								</div>
+							</div>
+						)}
 					</div>
 
 					{/* Court */}
