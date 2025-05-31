@@ -238,7 +238,7 @@ function Umpire() {
                         {getRightSideOptions().map((option, index) => (
                           <div 
                             key={index} 
-                            className={`px-4 py-2 text-black hover:bg-blue-100 cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
+                            className={`px-4 py-2 text-black hover:bg-[#B1D848] cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
                             onClick={() => selectRightSide(option)}
                           >
                             {option}
@@ -279,7 +279,7 @@ function Umpire() {
                         {getAllPlayers().map((player, index) => (
                           <div 
                             key={index} 
-                            className={`px-4 py-2 text-black hover:bg-blue-100 cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
+                            className={`px-4 py-2 text-black hover:bg-[#B1D848] cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
                             onClick={() => selectServer(player)}
                           >
                             {player}
@@ -320,7 +320,7 @@ function Umpire() {
                         {getAllPlayers().map((player, index) => (
                           <div 
                             key={index} 
-                            className={`px-4 py-2 text-black hover:bg-blue-100 cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
+                            className={`px-4 py-2 text-black hover:bg-[#B1D848] cursor-pointer transition-colors duration-150 ${index > 0 ? 'border-t border-gray-200' : ''}`}
                             onClick={() => selectReceiver(player)}
                           >
                             {player}
@@ -333,7 +333,7 @@ function Umpire() {
               </div>
               <button
                 onClick={handleStartGame}
-                className="w-3/4 bg-white text-black font-inter font-bold py-3 rounded-2xl hover:bg-opacity-90 transition-all duration-200 ease-in-out transform hover:scale-[1.02] active:scale-[0.98]"
+                className="w-3/4 bg-white text-black font-inter font-bold py-3 rounded-2xl hover:bg-[#B1D848] transition-all duration-200 ease-in-out transform hover:scale-[1.02] active:scale-[0.98]"
               >
                 Start match
               </button>
