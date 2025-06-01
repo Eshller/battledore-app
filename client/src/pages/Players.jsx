@@ -10,6 +10,7 @@ function Players() {
 	const [uploading, setUploading] = useState(false);
 	const [players, setPlayers] = useState([]);
 	const fileInputRef = useRef(null);
+	const modalRef = useRef(null);
 	const [deleteConfirmation, setDeleteConfirmation] = useState({
 		isOpen: false,
 		playerId: null,
@@ -201,6 +202,28 @@ function Players() {
 		}
 	};
 
+	// Handle click outside modal
+	const handleClickOutside = (event) => {
+		if (modalRef.current && !modalRef.current.contains(event.target)) {
+			setIsImportModalOpen(false);
+			setSelectedFile(null);
+			setImportedPlayers([]);
+		}
+	};
+
+	// Add and remove event listener for clicks outside modal
+	useEffect(() => {
+		if (isImportModalOpen) {
+			document.addEventListener('mousedown', handleClickOutside);
+		} else {
+			document.removeEventListener('mousedown', handleClickOutside);
+		}
+
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, [isImportModalOpen]);
+
 	// Handle opening the delete confirmation dialog
 	const handleDeleteClick = (playerId, playerName) => {
 		setDeleteConfirmation({
@@ -371,7 +394,7 @@ function Players() {
 			{/* Import CSV Modal */}
 			{isImportModalOpen && (
 				<div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-y-auto">
-					<div className="bg-white rounded-xl shadow-xl w-full max-w-xl my-8 relative flex flex-col">
+					<div ref={modalRef} className="bg-white rounded-xl shadow-xl w-full max-w-xl my-8 relative flex flex-col">
 						{/* Header - Fixed at top */}
 						<div className="bg-[#5fa8d3] px-5 py-3 flex justify-between items-center rounded-t-xl">
 							<h2 className="text-lg font-bold text-white flex items-center gap-2">
