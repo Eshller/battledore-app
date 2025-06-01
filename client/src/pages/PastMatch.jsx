@@ -54,18 +54,22 @@ function PastMatch() {
 															<span className="text-2xl sm:text-3xl font-bold">
 																{event?.scores.slice(-1)[0]?.firstTeamScore}
 															</span>
-															<p className="text-xs mt-0.5">
-																({event?.firstTeamName})
-															</p>
+															{event?.firstTeamName && (
+																<p className="text-xs mt-0.5">
+																	({event?.firstTeamName})
+																</p>
+															)}
 														</div>
 														<span className="text-xl font-bold">-</span>
 														<div className="text-center">
 															<span className="text-2xl sm:text-3xl font-bold">
 																{event?.scores.slice(-1)[0]?.secondTeamScore}
 															</span>
-															<p className="text-xs mt-0.5">
-																({event?.secondTeamName})
-															</p>
+															{event?.secondTeamName && (
+																<p className="text-xs mt-0.5">
+																	({event?.secondTeamName})
+																</p>
+															)}
 														</div>
 													</div>
 													<div className="bg-green-500 px-3 py-1 rounded-lg">
@@ -80,9 +84,11 @@ function PastMatch() {
 									{myData.isOperator && (
 										<div className="flex items-start">
 											<button
-												onClick={() =>
-													removeMatch(event?.eventDetails?._id, event?._id)
-												}
+												onClick={() => {
+													if (window.confirm('Are you sure you want to delete this match?')) {
+														removeMatch(event?.eventDetails?._id, event?._id);
+													}
+												}}
 												className="p-1.5 hover:bg-red-500/20 rounded-full transition-colors"
 											>
 												<svg

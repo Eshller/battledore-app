@@ -4,10 +4,12 @@ import {
   loginUser,
   registerUser,
   allUsers,
+  getAllPlayers,
   getUser,
   updateUserDetail,
   createNewPassword,
   deleteUser,
+  importPlayersFromCSV
 } from "../Controllers/user.controller.js";
 import {
   getAllEvents,
@@ -38,8 +40,12 @@ router.route("/users/delete/:userId").delete(authMiddleware, deleteUser);
 router.route("/getmydata").get(authMiddleware, getUser);
 router.route("/updatemydata").put(authMiddleware, updateUserDetail);
 
-// get all registered users
-router.route("/players").get(authMiddleware, allUsers);
+// get all registered users (accounts)
+router.route("/users").get(authMiddleware, allUsers);
+// get all players
+router.route("/players").get(authMiddleware, getAllPlayers);
+// import players from CSV
+router.route("/players/import").post(authMiddleware, importPlayersFromCSV);
 
 // event routes
 router.route("/events").get(authMiddleware, getAllEvents);

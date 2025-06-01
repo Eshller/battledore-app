@@ -20,6 +20,10 @@ function EventList({ event }) {
   function scheduleMatch() {
     setMatch(!match);
   }
+  
+  function closeMatchForm() {
+    setMatch(false);
+  }
 
   function editEventDetail() {
     updateEvent(event._id, {
@@ -207,7 +211,14 @@ function EventList({ event }) {
         </div>
       </div>
 
-      <div>{match && <MatchForm event={event} />}</div>
+      <div>
+        {match && (
+          <MatchForm 
+            event={event} 
+            onClose={closeMatchForm} 
+          />
+        )}
+      </div>
     </>
   );
 }

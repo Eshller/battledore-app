@@ -9,7 +9,21 @@ function MatchList({ match, eventId }) {
 
   const [clickToDelete, setClickToDelete] = useState(false);
 
-  const today = dayjs().format("DD-MM-YYYY");
+  // Format today's date to match the format stored in the database
+  const today = dayjs().format("YYYY-MM-DD");
+  
+  // Alternative approach: convert match date to the same format for comparison
+  const isMatchToday = () => {
+    if (!match?.matchDate) return false;
+    // Convert match date to YYYY-MM-DD format if it's in DD-MM-YYYY format
+    const matchDate = match.matchDate.includes('-') && match.matchDate.length === 10 ?
+      // If it's already in YYYY-MM-DD format, use it directly
+      match.matchDate.indexOf('-') === 4 ? match.matchDate :
+      // Otherwise convert from DD-MM-YYYY to YYYY-MM-DD
+      dayjs(match.matchDate, "DD-MM-YYYY").format("YYYY-MM-DD") :
+      match.matchDate;
+    return today === matchDate;
+  };
 
   function startGame() {
     Navigate(`/umpire/${match._id}`, { state: { match } });
@@ -25,7 +39,12 @@ function MatchList({ match, eventId }) {
       <div className="rounded-2xl px-3 py-1 md:p-4 my-4 text-base md:text-lg bg-[#7cb6cb] text-white font-inter font-medium flex justify-between items-center">
         <div className="lg:flex gap-5">
           <h1>{match?.typeOfMatch}</h1>
-          <p>{`${match?.firstTeamName} vs ${match?.secondTeamName}`}</p>
+          <p>
+            {match?.firstTeamName && match?.secondTeamName 
+              ? `${match?.firstTeamName} vs ${match?.secondTeamName}`
+              : `${match?.playerOne}${match?.playerThree ? ` & ${match?.playerThree}` : ''} vs ${match?.playerTwo}${match?.playerFour ? ` & ${match?.playerFour}` : ''}`
+            }
+          </p>
           <p>{match?.matchDate}</p>
           <p>{toSentenceCase(match?.referee)}</p>
         </div>
@@ -35,7 +54,7 @@ function MatchList({ match, eventId }) {
               <div>
                 {myData?.isUmpire || myData?.isOperator ? (
                   <div>
-                    {today === match?.matchDate && (
+                    {isMatchToday() && (
                       <button
                         onClick={startGame}
                         className="border-2 rounded-xl py-1 px-5 bg-green-500 text-white font-inter font-bold"

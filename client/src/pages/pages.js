@@ -16,6 +16,7 @@ import ScorePage from "./ScorePage";
 import MatchDetails from "./MatchDetails.jsx";
 import Umpire from "./Umpire.jsx";
 import UmpireSection from "./UmpireSection";
+import Players from "./Players";
 
 export {
 	Home,
@@ -36,4 +37,5 @@ export {
 	MatchDetails,
 	Umpire,
 	UmpireSection,
+	Players,
 };

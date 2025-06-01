@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { DataGrid } from "@mui/x-data-grid";
 import { useParams } from "react-router-dom";
 import { useService } from "../ContextAPI/axios";
 import io from "socket.io-client";
 
-const socket = io(`${import.meta.env.VITE_SERVER}`);
+// Don't create socket instance at module level
+// const socket = io(`${import.meta.env.VITE_SERVER}`);
 
 function ScoreTable() {
   const { getMatchData, matchData } = useService();
   const gameId = useParams();
-
   const [tableData, setTableData] = useState([]);
+  // Create socket reference
+  const socketRef = useRef(null);
 
   useEffect(() => {
     getMatchData(gameId.id);
@@ -30,14 +32,36 @@ function ScoreTable() {
   }, [matchData]);
 
   useEffect(() => {
+    // Create socket instance on component mount
+    if (!socketRef.current) {
+      socketRef.current = io(`${import.meta.env.VITE_SERVER}`);
+    }
+    
+    const socket = socketRef.current;
+
     socket.on("score_updated", (data) => {
-      if (data.status === "start") {
+      // Check for both matchId and gameId in the data
+      const matchIdToCheck = data.matchId || data.gameId;
+      
+      if (gameId.id === matchIdToCheck) {
         setTableData((prev) => [data, ...prev]);
       }
     });
 
     return () => {
-      socket.off("score_updated");
+      if (socketRef.current) {
+        socketRef.current.off("score_updated");
+      }
+    };
+  }, [gameId.id]);
+
+  // Add an effect to clean up the socket connection when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, []);
 

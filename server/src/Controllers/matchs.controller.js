@@ -59,19 +59,21 @@ const createMatch = async (req, res) => {
       matchDate,
       totalPoints,
     } = req.body;
-    if (
-      [
-        eventDetails,
-        typeOfMatch,
-        firstTeamName,
-        secondTeamName,
-        playerOne,
-        playerTwo,
-        umpireId,
-        matchDate,
-      ].some((field) => field?.trim() === "")
-    ) {
-      return res.status(400).json({ message: "All fields are required" });
+
+    // Validate required string fields
+    const requiredStringFields = [
+      { field: eventDetails, name: 'Event Details' },
+      { field: typeOfMatch, name: 'Type of Match' },
+      { field: playerOne, name: 'Player One' },
+      { field: playerTwo, name: 'Player Two' },
+      { field: umpireId, name: 'Umpire' },
+      { field: matchDate, name: 'Match Date' }
+    ];
+
+    for (const { field, name } of requiredStringFields) {
+      if (!field || typeof field !== 'string' || field.trim() === '') {
+        return res.status(400).json({ message: `${name} is required` });
+      }
     }
 
     const umpire = await User.findOne({
@@ -86,11 +88,16 @@ const createMatch = async (req, res) => {
       return res.status(404).json({ message: "Event not found" });
     }
 
+    // Get the count of existing matches for this event to determine the match order
+    const matchCount = await Match.countDocuments({ eventDetails: event._id });
+    const matchOrder = matchCount + 1;
+    const matchNumber = `${event.eventTitle.substring(0, 3).toUpperCase()}-${matchOrder}`;
+
     const newMatch = new Match({
-      eventDetails,
+      eventDetails: event._id,
       typeOfMatch,
-      firstTeamName,
-      secondTeamName,
+      firstTeamName: firstTeamName || "",
+      secondTeamName: secondTeamName || "",
       playerOne,
       playerTwo,
       playerThree,
@@ -98,6 +105,10 @@ const createMatch = async (req, res) => {
       matchDate,
       totalPoints: totalPoints || 21,
       referee: umpire.username,
+      umpire: umpire.username,
+      umpireId: umpireId,
+      matchOrder: matchOrder,
+      matchNumber: matchNumber,
     });
 
     const createdMatch = await newMatch.save();

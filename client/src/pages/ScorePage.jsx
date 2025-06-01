@@ -92,7 +92,7 @@ function ScorePage() {
 	const timerIntervalRef = useRef(null);
 	const [showInterval, setShowInterval] = useState(false);
 	const [intervalTeam, setIntervalTeam] = useState(null);
-	const [intervalTimeLeft, setIntervalTimeLeft] = useState(120); // 2 minutes in seconds
+	const [intervalTimeLeft, setIntervalTimeLeft] = useState(60); // 1 minute in seconds
 	const intervalTimerRef = useRef(null);
 	// Add new state variables for match/game point
 	const [matchPoint, setMatchPoint] = useState(null); // 1 for team 1, 2 for team 2, null for no match point
@@ -254,6 +254,7 @@ function ScorePage() {
 	) => {
 		const scoreData = {
 			gameId: gameId.id,
+			matchId: gameId.id, // Add matchId for newer components
 			firstTeamScore: f_score,
 			secondTeamScore: s_score,
 			status: isActive,
@@ -450,9 +451,12 @@ function ScorePage() {
 		}
 	};
 
+	// Add a new state variable to track if interval has been shown for this match
+	const [intervalShown, setIntervalShown] = useState(false);
+
 	const checkForInterval = (team, score) => {
-		// Don't trigger interval if it's already showing
-		if (showInterval) return;
+		// Don't trigger interval if it's already showing or has been shown before
+		if (showInterval || intervalShown) return;
 
 		// Check if we've reached the interval point based on match total points
 		const intervalPoint = matchData?.totalPoints === 15 ? 8 : 11;
@@ -468,13 +472,14 @@ function ScorePage() {
 			// Show the interval UI
 			setIntervalTeam(team);
 			setShowInterval(true);
-			setIntervalTimeLeft(120); // Reset interval timer to 2 minutes
+			setIntervalShown(true); // Mark that interval has been shown for this match
+			setIntervalTimeLeft(60); // Reset interval timer to 1 minute
 
 			// Emit interval start event to sync with other clients
 			socket.emit("interval_start", {
 				matchId: gameId.id,
 				team: team,
-				timeLeft: 120,
+				timeLeft: 60,
 			});
 
 			// Start interval timer
@@ -500,40 +505,62 @@ function ScorePage() {
 
 	// Function to check for match point or game point
 	const checkForMatchPoint = () => {
-		// Get the winning score based on match type
-		const winningScore = matchData?.totalPoints || 21;
+		if (!matchData) return; // Don't check if matchData isn't loaded
 
 		// Get current scores as integers
 		const team1Score = parseInt(teamOneScore);
 		const team2Score = parseInt(teamTwoScore);
 
-		// Reset match point if no longer applicable
-		if (team1Score < winningScore - 1 && team2Score < winningScore - 1) {
+		// If either team has reached 21, don't show match point
+		if (team1Score >= 21 || team2Score >= 21) {
 			setMatchPoint(null);
 			return;
 		}
 
-		// Check for match point for team 1
-		if (team1Score >= winningScore - 1 && team1Score - team2Score >= 1) {
-			setMatchPoint(1);
-			return;
-		}
+		// For singles matches, show match point as soon as any team reaches exactly 20
+		if (!matchData?.playerThree && !matchData?.playerFour) {
+			if (team1Score === 20) {
+				setMatchPoint(1);
+				return;
+			}
+			if (team2Score === 20) {
+				setMatchPoint(2);
+				return;
+			}
+			// Reset match point if neither team is at 20
+			setMatchPoint(null);
+		} else {
+			// For doubles matches
+			const winningScore = matchData?.totalPoints || 21;
+			const matchPointScore = winningScore - 1;
 
-		// Check for match point for team 2
-		if (team2Score >= winningScore - 1 && team2Score - team1Score >= 1) {
-			setMatchPoint(2);
-			return;
-		}
+			// Reset match point if no longer applicable
+			if (team1Score < matchPointScore && team2Score < matchPointScore) {
+				setMatchPoint(null);
+				return;
+			}
 
-		// No match point
-		setMatchPoint(null);
+			if (team1Score >= matchPointScore && team1Score - team2Score >= 1) {
+				setMatchPoint(1);
+				return;
+			}
+			if (team2Score >= matchPointScore && team2Score - team1Score >= 1) {
+				setMatchPoint(2);
+				return;
+			}
+			setMatchPoint(null);
+		}
 	};
+
+	// Add useEffect to check for match point when scores change
+	useEffect(() => {
+		if (matchStarted && matchData) {
+			checkForMatchPoint();
+		}
+	}, [teamOneScore, teamTwoScore, matchData, matchStarted]);
 
 	// Check if a team has won the match
 	const checkForWin = () => {
-		// Get the winning score based on match type
-		const winningScore = matchData?.totalPoints || 21;
-
 		// Get current scores as integers
 		const team1Score = parseInt(teamOneScore);
 		const team2Score = parseInt(teamTwoScore);
@@ -543,70 +570,139 @@ function ScorePage() {
 			return false;
 		}
 
-		// Check if team 1 has won
-		if (
-			(team1Score >= winningScore && team1Score - team2Score >= 2) ||
-			team1Score >= winningScore + 9
-		) {
-			// Maximum score is winning score + 9
-			setWinningTeam(1);
-			setShowWinAnimation(true);
+		// For singles matches
+		if (!matchData?.playerThree && !matchData?.playerFour) {
+			// Check if team 1 has won (reached 21 with 2 point lead)
+			if (team1Score >= 21 && team1Score - team2Score >= 2) {
+				setWinningTeam(1);
+				setShowWinAnimation(true);
+				const endTime = new Date();
+				setMatchEndTime(endTime);
+				setTimeout(() => {
+					setShowWinAnimation(false);
+					stopMatchTimer();
+					end();
+				}, 1500);
+				return true;
+			}
 
-			// Record the match end time
-			const endTime = new Date();
-			setMatchEndTime(endTime);
+			// Check if team 2 has won (reached 21 with 2 point lead)
+			if (team2Score >= 21 && team2Score - team1Score >= 2) {
+				setWinningTeam(2);
+				setShowWinAnimation(true);
+				const endTime = new Date();
+				setMatchEndTime(endTime);
+				setTimeout(() => {
+					setShowWinAnimation(false);
+					stopMatchTimer();
+					end();
+				}, 1500);
+				return true;
+			}
+		} else {
+			// For doubles matches, use the configurable winning score
+			const winningScore = matchData?.totalPoints || 21;
 
-			// Automatically end the match after a shorter animation
-			setTimeout(() => {
-				setShowWinAnimation(false);
-				stopMatchTimer();
-				end(); // Call end directly instead of endMatchSession
-			}, 1500); // Reduced from 3000ms to 1500ms
+			// Check if team 1 has won
+			if (
+				(team1Score >= winningScore && team1Score - team2Score >= 2) ||
+				team1Score >= winningScore + 9
+			) {
+				setWinningTeam(1);
+				setShowWinAnimation(true);
+				const endTime = new Date();
+				setMatchEndTime(endTime);
+				setTimeout(() => {
+					setShowWinAnimation(false);
+					stopMatchTimer();
+					end();
+				}, 1500);
+				return true;
+			}
 
-			return true;
-		}
-
-		// Check if team 2 has won
-		if (
-			(team2Score >= winningScore && team2Score - team1Score >= 2) ||
-			team2Score >= winningScore + 9
-		) {
-			// Maximum score is winning score + 9
-			setWinningTeam(2);
-			setShowWinAnimation(true);
-
-			// Record the match end time
-			const endTime = new Date();
-			setMatchEndTime(endTime);
-
-			// Automatically end the match after a shorter animation
-			setTimeout(() => {
-				setShowWinAnimation(false);
-				stopMatchTimer();
-				end(); // Call end directly instead of endMatchSession
-			}, 1500); // Reduced from 3000ms to 1500ms
-
-			return true;
+			// Check if team 2 has won
+			if (
+				(team2Score >= winningScore && team2Score - team2Score >= 2) ||
+				team2Score >= winningScore + 9
+			) {
+				setWinningTeam(2);
+				setShowWinAnimation(true);
+				const endTime = new Date();
+				setMatchEndTime(endTime);
+				setTimeout(() => {
+					setShowWinAnimation(false);
+					stopMatchTimer();
+					end();
+				}, 1500);
+				return true;
+			}
 		}
 
 		return false;
 	};
 
 	const Team1 = (scoringPlayer) => {
-		// Hide serve indicator when a point is scored
+		const newTeamOneScore = parseInt(teamOneScore) + 1;
+		const winningScore = matchData?.totalPoints || 21;
+		
+		// Check if this point would win the game (for both singles and doubles)
+		if (newTeamOneScore >= winningScore && (newTeamOneScore - parseInt(teamTwoScore) >= 2)) {
+			// First update the score
+			setTeamOneScore(newTeamOneScore.toString());
+			updateService(1);
+			setIsPostInterval(false);
+
+			// Send score update
+			const scoreData = {
+				gameId: gameId.id,
+				firstTeamScore: newTeamOneScore.toString(),
+				secondTeamScore: teamTwoScore,
+				status: "start",
+				won: null,
+				Id: gameId.id,
+				numberOfShuttlecock: numberOfShuttlecock,
+				firstTeamName: matchData?.firstTeamName,
+				secondTeamName: matchData?.secondTeamName,
+				timestamp: new Date().toISOString(),
+				servingTeam,
+				serviceCourt,
+				serverPlayer,
+				receiverPlayer,
+				startTime: matchStartTime ? matchStartTime.toISOString() : null,
+				endTime: matchEndTime ? matchEndTime.toISOString() : null,
+				scoringPlayer: scoringPlayer
+			};
+
+			socket.emit("update_score", scoreData);
+
+			// Then trigger win sequence after a short delay to allow score update
+			setTimeout(() => {
+				setWinningTeam(1);
+				setShowWinAnimation(true);
+				const endTime = new Date();
+				setMatchEndTime(endTime);
+				setTimeout(() => {
+					setShowWinAnimation(false);
+					stopMatchTimer();
+					end();
+				}, 1500);
+			}, 100);
+			return;
+		}
+
+		// For singles matches, prevent scoring beyond 21 unless needed for 2-point lead
+		if (!matchData?.playerThree && !matchData?.playerFour && newTeamOneScore > 21 && (newTeamOneScore - parseInt(teamTwoScore) < 2)) {
+			return;
+		}
+
 		setShowServeIndicator(false);
-
-		const newTeamOneScore = (parseInt(teamOneScore) + 1).toString();
-		setTeamOneScore(newTeamOneScore);
-		// Update service tracking when team 1 scores
+		setTeamOneScore(newTeamOneScore.toString());
 		updateService(1);
-
-		// Reset the post-interval state when a score is made
 		setIsPostInterval(false);
 
 		const scoreData = {
 			gameId: gameId.id,
-			firstTeamScore: newTeamOneScore,
+			firstTeamScore: newTeamOneScore.toString(),
 			secondTeamScore: teamTwoScore,
 			status: "start",
 			won: null,
@@ -621,38 +717,80 @@ function ScorePage() {
 			receiverPlayer,
 			startTime: matchStartTime ? matchStartTime.toISOString() : null,
 			endTime: matchEndTime ? matchEndTime.toISOString() : null,
-			scoringPlayer: scoringPlayer,
-			scoringTeam: "first", // Explicitly set the scoring team
-			individualScore: true, // Flag to indicate this is an individual player score
+			scoringPlayer: scoringPlayer
 		};
 
 		socket.emit("update_score", scoreData);
+		checkForInterval(1, newTeamOneScore.toString());
 
-		// Check for interval
-		checkForInterval(1, newTeamOneScore);
-
-		// Check for win first, then match point if no win
 		if (!checkForWin()) {
 			checkForMatchPoint();
 		}
 	};
 
 	const Team2 = (scoringPlayer) => {
-		// Hide serve indicator when a point is scored
+		const newTeamTwoScore = parseInt(teamTwoScore) + 1;
+		const winningScore = matchData?.totalPoints || 21;
+		
+		// Check if this point would win the game (for both singles and doubles)
+		if (newTeamTwoScore >= winningScore && (newTeamTwoScore - parseInt(teamOneScore) >= 2)) {
+			// First update the score
+			setTeamTwoScore(newTeamTwoScore.toString());
+			updateService(2);
+			setIsPostInterval(false);
+
+			// Send score update
+			const scoreData = {
+				gameId: gameId.id,
+				firstTeamScore: teamOneScore,
+				secondTeamScore: newTeamTwoScore.toString(),
+				status: "start",
+				won: null,
+				Id: gameId.id,
+				numberOfShuttlecock: numberOfShuttlecock,
+				firstTeamName: matchData?.firstTeamName,
+				secondTeamName: matchData?.secondTeamName,
+				timestamp: new Date().toISOString(),
+				servingTeam,
+				serviceCourt,
+				serverPlayer,
+				receiverPlayer,
+				startTime: matchStartTime ? matchStartTime.toISOString() : null,
+				endTime: matchEndTime ? matchEndTime.toISOString() : null,
+				scoringPlayer: scoringPlayer
+			};
+
+			socket.emit("update_score", scoreData);
+
+			// Then trigger win sequence after a short delay to allow score update
+			setTimeout(() => {
+				setWinningTeam(2);
+				setShowWinAnimation(true);
+				const endTime = new Date();
+				setMatchEndTime(endTime);
+				setTimeout(() => {
+					setShowWinAnimation(false);
+					stopMatchTimer();
+					end();
+				}, 1500);
+			}, 100);
+			return;
+		}
+
+		// For singles matches, prevent scoring beyond 21 unless needed for 2-point lead
+		if (!matchData?.playerThree && !matchData?.playerFour && newTeamTwoScore > 21 && (newTeamTwoScore - parseInt(teamOneScore) < 2)) {
+			return;
+		}
+
 		setShowServeIndicator(false);
-
-		const newTeamTwoScore = (parseInt(teamTwoScore) + 1).toString();
-		setTeamTwoScore(newTeamTwoScore);
-		// Update service tracking when team 2 scores
+		setTeamTwoScore(newTeamTwoScore.toString());
 		updateService(2);
-
-		// Reset the post-interval state when a score is made
 		setIsPostInterval(false);
 
 		const scoreData = {
 			gameId: gameId.id,
 			firstTeamScore: teamOneScore,
-			secondTeamScore: newTeamTwoScore,
+			secondTeamScore: newTeamTwoScore.toString(),
 			status: "start",
 			won: null,
 			Id: gameId.id,
@@ -666,37 +804,26 @@ function ScorePage() {
 			receiverPlayer,
 			startTime: matchStartTime ? matchStartTime.toISOString() : null,
 			endTime: matchEndTime ? matchEndTime.toISOString() : null,
-			scoringPlayer: scoringPlayer,
-			scoringTeam: "second", // Explicitly set the scoring team
-			individualScore: true, // Flag to indicate this is an individual player score
+			scoringPlayer: scoringPlayer
 		};
 
 		socket.emit("update_score", scoreData);
+		checkForInterval(2, newTeamTwoScore.toString());
 
-		// Check for interval
-		checkForInterval(2, newTeamTwoScore);
-
-		// Check for win first, then match point if no win
 		if (!checkForWin()) {
 			checkForMatchPoint();
 		}
 	};
 
 	const handleButtonClick = (side, player) => {
-		// If it's an undo action, handle it separately
 		if (side === "undo") {
-			undoChanges();
-			return;
+				undoChanges();
+				return;
 		}
 
-		// If a specific player is provided, use that player
 		if (player) {
-			// Determine which team the player belongs to
-			const isFirstTeam =
-				player === matchData?.playerOne || player === matchData?.playerThree;
-
-			const isSecondTeam =
-				player === matchData?.playerTwo || player === matchData?.playerFour;
+			const isFirstTeam = player === matchData?.playerOne || player === matchData?.playerThree;
+			const isSecondTeam = player === matchData?.playerTwo || player === matchData?.playerFour;
 
 			if (!player || (!isFirstTeam && !isSecondTeam)) {
 				console.error("Player not found or team cannot be determined");
@@ -711,18 +838,13 @@ function ScorePage() {
 			return;
 		}
 
-		// Legacy handling for buttons without specific player
-		const isReceiverFirstTeam = matchData?.firstTeamName === matchData.receiver;
+		// Handle button clicks without specific player
 		if (side === "right") {
-			const player = isReceiverFirstTeam
-				? matchData?.playerTwo
-				: matchData?.playerOne;
-			isReceiverFirstTeam ? Team2(player) : Team1(player);
+			const player = matchData.rightTeam === matchData.firstTeamName ? matchData?.playerOne : matchData?.playerTwo;
+			matchData.rightTeam === matchData.firstTeamName ? Team1(player) : Team2(player);
 		} else {
-			const player = isReceiverFirstTeam
-				? matchData?.playerOne
-				: matchData?.playerTwo;
-			isReceiverFirstTeam ? Team1(player) : Team2(player);
+			const player = matchData.rightTeam === matchData.firstTeamName ? matchData?.playerTwo : matchData?.playerOne;
+			matchData.rightTeam === matchData.firstTeamName ? Team2(player) : Team1(player);
 		}
 	};
 
@@ -734,8 +856,8 @@ function ScorePage() {
 		console.log("End Match Session - Teams and Scores:", {
 			teamOneScore: teamOneScoreInt,
 			teamTwoScore: teamTwoScoreInt,
-			firstTeamName: matchData?.firstTeamName,
-			secondTeamName: matchData?.secondTeamName,
+			firstTeamName: matchData?.firstTeamName || matchData?.playerOne,
+			secondTeamName: matchData?.secondTeamName || matchData?.playerTwo,
 		});
 
 		let winner = "";
@@ -743,11 +865,11 @@ function ScorePage() {
 
 		// Determine the winner based on the actual scores
 		if (teamOneScoreInt > teamTwoScoreInt) {
-			winner = matchData?.firstTeamName;
-			loser = matchData?.secondTeamName;
+			winner = matchData?.firstTeamName || matchData?.playerOne;
+			loser = matchData?.secondTeamName || matchData?.playerTwo;
 		} else if (teamOneScoreInt < teamTwoScoreInt) {
-			winner = matchData?.secondTeamName;
-			loser = matchData?.firstTeamName;
+			winner = matchData?.secondTeamName || matchData?.playerTwo;
+			loser = matchData?.firstTeamName || matchData?.playerOne;
 		} else {
 			winner = "DRAW";
 		}
@@ -761,7 +883,7 @@ function ScorePage() {
 				setWinnerMessage(`${winner} wins!`);
 			} else {
 				setWinnerMessage(
-					`Match is draw between ${matchData?.firstTeamName} and ${matchData?.secondTeamName}`
+					`Match is draw between ${matchData?.firstTeamName || matchData?.playerOne} and ${matchData?.secondTeamName || matchData?.playerTwo}`
 				);
 			}
 			// Show the confirmation dialog
@@ -796,10 +918,11 @@ function ScorePage() {
 			let winner = "";
 
 			// Determine the winner based on the actual scores
+			// For individual singles matches without team names, use player names
 			if (teamOneScoreInt > teamTwoScoreInt) {
-				winner = matchData?.firstTeamName;
+				winner = matchData?.firstTeamName || matchData?.playerOne;
 			} else if (teamOneScoreInt < teamTwoScoreInt) {
-				winner = matchData?.secondTeamName;
+				winner = matchData?.secondTeamName || matchData?.playerTwo;
 			} else {
 				winner = "DRAW";
 			}
@@ -851,9 +974,14 @@ function ScorePage() {
 
 			throw new Error("Failed to end match");
 		} catch (error) {
+			// Only show error if it's not the expected "Match Ends" message
 			if (error.message !== "Match Ends") {
 				toast.error("Failed to end match: " + error.message);
 				console.error("Error ending match:", error);
+			} else {
+				// If we get "Match Ends", it's actually a success case
+				toast.success("Match ended successfully");
+				setTimeout(() => Navigate("/pastmatches"), 500);
 			}
 		}
 	};
@@ -898,6 +1026,7 @@ function ScorePage() {
 		setMatchTime(0);
 		setShowInterval(false);
 		setIntervalTeam(null);
+		setIntervalShown(false); // Reset interval shown state
 		setMatchPoint(null);
 		setShowWinAnimation(false);
 		setWinningTeam(null);
@@ -1080,269 +1209,134 @@ function ScorePage() {
 	const handleLoveAllPlay = () => {
 		setMatchStarted(true);
 		setPlay(true);
-
-		// Show serve indicator at the start of the match
 		setShowServeIndicator(true);
 
-		// Record the match start time
 		const startTime = new Date();
 		setMatchStartTime(startTime);
 
-		// Initialize service based on the server information from the umpire page
+		// Initialize service
 		if (matchData?.server) {
-			// Determine which team is serving based on the server player name
-			let initialServingTeam;
-
-			// Check if server belongs to first team
-			if (
-				matchData.server === matchData.playerOne ||
-				matchData.server === matchData.playerThree
-			) {
-				initialServingTeam = 1;
-			}
-			// Check if server belongs to second team
-			else if (
-				matchData.server === matchData.playerTwo ||
-				matchData.server === matchData.playerFour
-			) {
-				initialServingTeam = 2;
-			}
-			// Default to team 1 if server not found
-			else {
-				initialServingTeam = 1;
-			}
+			const initialServingTeam = 
+				(matchData.server === matchData.playerOne || matchData.server === matchData.playerThree) ? 1 : 2;
 
 			setServingTeam(initialServingTeam);
-			setServiceCourt("right"); // Even score (0) serves from right court
-			setServerPlayer(matchData.server);
+			setServiceCourt("right"); // Always start from right court at 0-0
 
-			// Set the receiver based on the server
+			// In doubles, at start (0-0):
+			// - Server starts from right court
+			// - Receiver on diagonal court (right)
 			if (!matchData?.playerThree && !matchData?.playerFour) {
-				// Singles - receiver is the player from the other team
-				setReceiverPlayer(
-					initialServingTeam === 1 ? matchData?.playerTwo : matchData?.playerOne
-				);
+				// Singles match
+				setServerPlayer(initialServingTeam === 1 ? matchData?.playerOne : matchData?.playerTwo);
+				setReceiverPlayer(initialServingTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
 			} else {
-				// Doubles - receiver is determined by service court
+				// Doubles match - initial setup
 				if (initialServingTeam === 1) {
-					setReceiverPlayer(matchData?.playerTwo); // Right court receiver from team 2
+					// Team 1 is serving
+					setServerPlayer(matchData?.server || matchData?.playerOne); // Use specified server or default to first player
+					setReceiverPlayer(matchData?.playerTwo); // Start with player on right court receiving
 				} else {
-					setReceiverPlayer(matchData?.playerOne); // Right court receiver from team 1
+					// Team 2 is serving
+					setServerPlayer(matchData?.server || matchData?.playerTwo); // Use specified server or default to first player
+					setReceiverPlayer(matchData?.playerOne); // Start with player on right court receiving
 				}
 			}
 		} else {
-			// Fallback to default behavior if no server information is available
+			// Default initialization if no server is specified
 			setServingTeam(1);
-			setServiceCourt("right"); // Even score (0) serves from right court
-
-			// Set the correct server based on singles or doubles
+			setServiceCourt("right"); // Always start from right court
+			
 			if (!matchData?.playerThree && !matchData?.playerFour) {
-				// Singles - server is the first player of team 1
-				setServerPlayer(matchData?.playerOne || "");
-				setReceiverPlayer(matchData?.playerTwo || "");
+				// Singles match
+				setServerPlayer(matchData.rightTeam === matchData.firstTeamName ? matchData?.playerOne : matchData?.playerTwo);
+				setReceiverPlayer(matchData.rightTeam === matchData.firstTeamName ? matchData?.playerTwo : matchData?.playerOne);
 			} else {
-				// Doubles - for even score (0), first player serves
-				setServerPlayer(matchData?.playerOne || "");
-				setReceiverPlayer(matchData?.playerTwo || "");
+				// Doubles match - initial setup
+				if (matchData.rightTeam === matchData.firstTeamName) {
+					// Right team is Team 1
+					setServerPlayer(matchData?.playerOne); // First player serves
+					setReceiverPlayer(matchData?.playerTwo); // Start with player on right court receiving
+				} else {
+					// Right team is Team 2
+					setServerPlayer(matchData?.playerTwo); // First player serves
+					setReceiverPlayer(matchData?.playerOne); // Start with player on right court receiving
+				}
 			}
 		}
 
-		// Reset the post-interval state
 		setIsPostInterval(false);
-
-		// Ensure win animation is not showing when starting a match
 		setShowWinAnimation(false);
 		setWinningTeam(null);
-
-		// Reset the initial score change flag
 		isInitialScoreChange.current = true;
 
-		// Send initial score with service tracking data and start time
 		sendScore("0", "0", "start", null, startTime, null, numberOfShuttlecock);
 
-		// Notify other clients that match has started
 		socket.emit("match_started", {
 			matchId: gameId.id,
 			startTime: startTime.toISOString(),
 		});
 
-		// Start the match timer
 		startMatchTimer();
 	};
 
-	// Function to update service after a point is scored
 	const updateService = (scoringTeam) => {
-		// In badminton:
-		// 1. The right to serve changes ONLY when the receiving side scores a point
-		// 2. If the serving side scores, they continue to serve but switch courts
-		// 3. The service court is determined by the server's score:
-		//    - Even score (0, 2, 4...) = serve from right court
-		//    - Odd score (1, 3, 5...) = serve from left court
-		// 4. In doubles, the server alternates between partners based on score
-
-		// Check if the scoring team is the current serving team
 		if (scoringTeam === servingTeam) {
-			// If the serving team scores, they continue to serve but switch courts
-			// Determine the new score of the serving team
-			const newScore =
-				scoringTeam === 1
-					? parseInt(teamOneScore) + 1
-					: parseInt(teamTwoScore) + 1;
-
-			// Determine service court based on the new score
-			// Even score = right court, odd score = left court
+			// If serving team scores:
+			// 1. Same server continues serving
+			// 2. Server moves to court based on their team's score (even=right, odd=left)
+			// 3. Receiver alternates between the two players
+			const newScore = scoringTeam === 1 ? parseInt(teamOneScore) + 1 : parseInt(teamTwoScore) + 1;
 			const newServiceCourt = newScore % 2 === 0 ? "right" : "left";
 			setServiceCourt(newServiceCourt);
 
-			// In doubles, update the server if needed
 			if (matchData?.playerThree && matchData?.playerFour) {
+				// Doubles - same server, alternate receiver
 				if (scoringTeam === 1) {
-					// For team 1, even score = first player, odd score = second player
-					setServerPlayer(
-						newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree
-					);
-					// Update receiver based on service court
-					setReceiverPlayer(
-						newServiceCourt === "right"
-							? matchData?.playerTwo
-							: matchData?.playerFour
-					);
+					// Team 1 keeps serve with same player
+					// Receiver alternates based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerTwo : matchData?.playerFour);
 				} else {
-					// For team 2, even score = first player, odd score = second player
-					setServerPlayer(
-						newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour
-					);
-					// Update receiver based on service court
-					setReceiverPlayer(
-						newServiceCourt === "right"
-							? matchData?.playerOne
-							: matchData?.playerThree
-					);
+					// Team 2 keeps serve with same player
+					// Receiver alternates based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerOne : matchData?.playerThree);
 				}
 			} else {
-				// Singles - receiver is always the same player for each team
-				if (scoringTeam === 1) {
-					setReceiverPlayer(matchData?.playerTwo);
-				} else {
-					setReceiverPlayer(matchData?.playerOne);
-				}
+				// Singles - receiver stays the same
+				setReceiverPlayer(scoringTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
 			}
 		} else {
-			// If the receiving team scores, the right to serve changes
-			// Update the serving team to the team that just scored
+			// If receiving team scores:
+			// 1. Service changes to receiving team
+			// 2. New server is determined by who won the point
+			// 3. Server starts from court based on their team's score
 			setServingTeam(scoringTeam);
-
-			// Determine the new score of the serving team
-			const newScore =
-				scoringTeam === 1
-					? parseInt(teamOneScore) + 1
-					: parseInt(teamTwoScore) + 1;
-
-			// Determine service court based on the new score
-			// Even score = right court, odd score = left court
+			const newScore = scoringTeam === 1 ? parseInt(teamOneScore) + 1 : parseInt(teamTwoScore) + 1;
 			const newServiceCourt = newScore % 2 === 0 ? "right" : "left";
 			setServiceCourt(newServiceCourt);
 
-			// Update the server player
 			if (!matchData?.playerThree && !matchData?.playerFour) {
-				// Singles - server is always the same player for each team
-				setServerPlayer(
-					scoringTeam === 1 ? matchData?.playerOne : matchData?.playerTwo
-				);
-				// Update receiver
-				setReceiverPlayer(
-					scoringTeam === 1 ? matchData?.playerTwo : matchData?.playerOne
-				);
+				// Singles
+				setServerPlayer(scoringTeam === 1 ? matchData?.playerOne : matchData?.playerTwo);
+				setReceiverPlayer(scoringTeam === 1 ? matchData?.playerTwo : matchData?.playerOne);
 			} else {
-				// Doubles - server alternates based on score
+				// Doubles - when service changes teams:
+				// The player who won the point becomes the server
 				if (scoringTeam === 1) {
-					// For team 1, even score = first player, odd score = second player
-					setServerPlayer(
-						newScore % 2 === 0 ? matchData?.playerOne : matchData?.playerThree
-					);
-					// Update receiver based on service court
-					setReceiverPlayer(
-						newServiceCourt === "right"
-							? matchData?.playerTwo
-							: matchData?.playerFour
-					);
+					// Team 1 won the point and gets to serve
+					// The player who won the point becomes the server
+					setServerPlayer(receiverPlayer === matchData?.playerOne ? matchData?.playerOne : matchData?.playerThree);
+					// Receiver alternates based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerTwo : matchData?.playerFour);
 				} else {
-					// For team 2, even score = first player, odd score = second player
-					setServerPlayer(
-						newScore % 2 === 0 ? matchData?.playerTwo : matchData?.playerFour
-					);
-					// Update receiver based on service court
-					setReceiverPlayer(
-						newServiceCourt === "right"
-							? matchData?.playerOne
-							: matchData?.playerThree
-					);
+					// Team 2 won the point and gets to serve
+					// The player who won the point becomes the server
+					setServerPlayer(receiverPlayer === matchData?.playerTwo ? matchData?.playerTwo : matchData?.playerFour);
+					// Receiver alternates based on service court
+					setReceiverPlayer(newServiceCourt === "right" ? matchData?.playerOne : matchData?.playerThree);
 				}
 			}
 		}
 	};
-
-	// Function to manually change the server
-	const changeServer = (team, court) => {
-		// Update serving team
-		setServingTeam(team);
-
-		// Update service court
-		setServiceCourt(court);
-
-		// Get the relevant score for the serving team
-		const score = team === 1 ? parseInt(teamOneScore) : parseInt(teamTwoScore);
-
-		// Update server player
-		updateServerPlayer(team, score);
-	};
-
-	// Add an effect to update service tracking when scores change
-	useEffect(() => {
-		if (matchStarted) {
-			// Only update if the match has started
-			const team1Score = parseInt(teamOneScore);
-			const team2Score = parseInt(teamTwoScore);
-
-			// Ensure service court is correct based on serving team's score
-			const servingTeamScore = servingTeam === 1 ? team1Score : team2Score;
-			const correctServiceCourt = servingTeamScore % 2 === 0 ? "right" : "left";
-
-			if (serviceCourt !== correctServiceCourt) {
-				setServiceCourt(correctServiceCourt);
-			}
-
-			// Ensure server player is correct
-			if (matchData?.playerThree && matchData?.playerFour) {
-				// Doubles - server alternates based on score
-				let correctServer = "";
-				if (servingTeam === 1) {
-					correctServer =
-						servingTeamScore % 2 === 0
-							? matchData?.playerOne
-							: matchData?.playerThree;
-				} else {
-					correctServer =
-						servingTeamScore % 2 === 0
-							? matchData?.playerTwo
-							: matchData?.playerFour;
-				}
-
-				if (serverPlayer !== correctServer) {
-					setServerPlayer(correctServer);
-				}
-			}
-
-			// Check for match point when scores change, but not on initial load
-			if (!isInitialScoreChange.current) {
-				if (!checkForWin()) {
-					checkForMatchPoint();
-				}
-			} else {
-				isInitialScoreChange.current = false;
-			}
-		}
-	}, [teamOneScore, teamTwoScore, servingTeam, matchStarted]);
 
 	const resumeAfterInterval = () => {
 		// Show serve indicator after interval
@@ -1358,7 +1352,7 @@ function ScorePage() {
 		setShowInterval(false);
 
 		// Reset interval time for next use
-		setIntervalTimeLeft(120);
+		setIntervalTimeLeft(60);
 
 		// Set post-interval state
 		setIsPostInterval(true);
@@ -1903,19 +1897,7 @@ function ScorePage() {
 				</>
 			)}
 
-			{/* Match Point Indicator */}
-			{matchPoint && !showWinAnimation && (
-				<div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 z-40 animate-pulse">
-					<div className="bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg text-center">
-						<h2 className="text-xl font-bold">
-							{matchPoint === 1
-								? matchData?.firstTeamName
-								: matchData?.secondTeamName}
-							{" MATCH POINT"}
-						</h2>
-					</div>
-				</div>
-			)}
+			
 
 			{/* Win Animation */}
 			{showWinAnimation && (
@@ -2075,96 +2057,213 @@ function ScorePage() {
 				{/* Main Section */}
 				<div className="w-[85%] lg:w-[60%] m-auto h-auto bg-white pb-4 rounded-t-3xl">
 					{/* Score */}
-					<div className="px-10 text-[4rem] lg:text-[5rem] text-[#7cb6cb] flex justify-center gap-5 md:gap-10 items-center">
-						<span>
-							{matchData.firstTeamName === matchData.receiver
-								? `${teamOneScore}`
-								: `${teamTwoScore}`}
-						</span>
-						<span> - </span>
-						<span>
-							{matchData.firstTeamName === matchData.receiver
-								? `${teamTwoScore}`
-								: `${teamOneScore}`}
-						</span>
-					</div>
-
-					{/* Serve Indicator */}
-					{showServeIndicator && matchStarted && (
-						<div className="flex justify-center mb-2">
-							<div className="bg-gray-100 px-4 py-2 rounded-lg shadow-sm">
-								<div className="text-lg font-semibold text-gray-800 flex items-center justify-center">
-									<span className="text-red-500 font-bold">Server-</span>
-									<span className="mr-2">{serverPlayer}</span>
-									<span className="mx-2">and</span>
-									<span className="text-blue-500 font-bold">Receiver-</span>
-									<span>{receiverPlayer}</span>
+					<div className="px-10 text-[4rem] lg:text-[5rem] text-[#7cb6cb] flex flex-col items-center">
+						<div className="flex justify-center gap-5 md:gap-10 items-center">
+							<span>
+								{matchData.rightTeam === matchData.firstTeamName
+									? teamTwoScore
+									: teamOneScore}
+							</span>
+							<span> - </span>
+							<span>
+								{matchData.rightTeam === matchData.firstTeamName
+									? teamOneScore
+									: teamTwoScore}
+							</span>
+						</div>
+						{/* Match Point Indicator */}
+						{matchPoint && !showWinAnimation && (
+							<div className="mt-2 animate-pulse">
+								<div className="bg-red-600 text-white px-6 py-2 rounded-lg shadow-lg text-center">
+									<h2 className="text-xl font-bold">
+										{matchPoint === 1
+											? matchData?.firstTeamName
+											: matchData?.secondTeamName}
+										{" MATCH POINT"}
+									</h2>
 								</div>
 							</div>
-						</div>
-					)}
+						)}
+					</div>
 
 					{/* Court */}
 					<div className="">
-						<div className="h-[10rem] sm:h-[14rem] md:h-[20rem] lg:h-[23rem] xl:h-[25rem] 2xl:h-[30rem] bg-green-600 flex shadow-lg relative">
-							{/* Court lines */}
-							<div className="absolute inset-0 flex">
-								{/* Vertical center line */}
-								<div className="w-[2px] h-full bg-white mx-auto"></div>
+						<div className="h-[10rem] sm:h-[14rem] md:h-[20rem] lg:h-[23rem] xl:h-[25rem] 2xl:h-[30rem] relative">
+							{/* Court background image */}
+							<img 
+								src="/badminton_court.jpg" 
+								alt="Badminton Court" 
+								className="w-full h-full object-cover object-center rounded-lg"
+							/>
 
-								{/* Horizontal lines */}
-								<div className="absolute top-1/4 w-full h-[2px] bg-white"></div>
-								<div className="absolute top-3/4 w-full h-[2px] bg-white"></div>
+							{/* Dynamic Player Positions */}
+							{matchStarted && (
+								<>
+									{/* Server Position */}
+									<div className={`absolute transition-all duration-300 ${
+										(servingTeam === 1 && matchData.rightTeam !== matchData.firstTeamName) ||
+										(servingTeam === 2 && matchData.rightTeam === matchData.firstTeamName)
+											? 'left-[20%]'
+											: 'right-[20%]'
+									} ${
+										serviceCourt === 'right' ? 'top-[25%]' : 'top-[65%]'
+									}`}>
+										<div className="bg-white/95 backdrop-blur-md p-3 md:p-4 rounded-xl shadow-xl border-2 border-gray-200 transform hover:scale-105 transition-all duration-300">
+											<p className="text-gray-800 text-base md:text-xl lg:text-2xl font-bold tracking-wide">
+												{serverPlayer}
+											</p>
+											{(servingTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName) && (
+												<p className="text-gray-600 text-sm md:text-base lg:text-lg font-medium mt-1">
+													({servingTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName})
+												</p>
+											)}
+										</div>
+									</div>
 
-								{/* Service court lines */}
-								<div className="absolute left-1/4 top-0 w-[2px] h-full bg-white"></div>
-								<div className="absolute left-3/4 top-0 w-[2px] h-full bg-white"></div>
-							</div>
+									{/* Server's Partner Position (for doubles) */}
+									{matchData?.playerThree && matchData?.playerFour && (
+										<div className={`absolute transition-all duration-300 ${
+											(servingTeam === 1 && matchData.rightTeam !== matchData.firstTeamName) ||
+											(servingTeam === 2 && matchData.rightTeam === matchData.firstTeamName)
+												? 'left-[20%]'
+												: 'right-[20%]'
+										} ${
+											serviceCourt === 'right' ? 'top-[65%]' : 'top-[25%]'
+										}`}>
+											<div className="bg-white/80 backdrop-blur-md p-3 md:p-4 rounded-xl shadow-xl border-2 border-gray-200 transform hover:scale-105 transition-all duration-300">
+												<p className="text-gray-800 text-base md:text-xl lg:text-2xl font-bold tracking-wide">
+													{servingTeam === 1 
+														? (serverPlayer === matchData?.playerOne ? matchData?.playerThree : matchData?.playerOne)
+														: (serverPlayer === matchData?.playerTwo ? matchData?.playerFour : matchData?.playerTwo)
+													}
+												</p>
+												{(servingTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName) && (
+													<p className="text-gray-600 text-sm md:text-base lg:text-lg font-medium mt-1">
+														({servingTeam === 1 ? matchData?.firstTeamName : matchData?.secondTeamName})
+													</p>
+												)}
+											</div>
+										</div>
+									)}
+
+									{/* Receiver Position */}
+									<div className={`absolute transition-all duration-300 ${
+										(servingTeam === 1 && matchData.rightTeam !== matchData.firstTeamName) ||
+										(servingTeam === 2 && matchData.rightTeam === matchData.firstTeamName)
+											? 'right-[20%]'
+											: 'left-[20%]'
+									} ${
+										serviceCourt === 'right' ? 'top-[65%]' : 'top-[25%]'
+									}`}>
+										<div className="bg-white/95 backdrop-blur-md p-3 md:p-4 rounded-xl shadow-xl border-2 border-gray-200 transform hover:scale-105 transition-all duration-300">
+											<p className="text-gray-800 text-base md:text-xl lg:text-2xl font-bold tracking-wide">
+												{receiverPlayer}
+											</p>
+											{(servingTeam === 1 ? matchData?.secondTeamName : matchData?.firstTeamName) && (
+												<p className="text-gray-600 text-sm md:text-base lg:text-lg font-medium mt-1">
+													({servingTeam === 1 ? matchData?.secondTeamName : matchData?.firstTeamName})
+												</p>
+											)}
+										</div>
+									</div>
+
+									{/* Receiver's Partner Position (for doubles) */}
+									{matchData?.playerThree && matchData?.playerFour && (
+										<div className={`absolute transition-all duration-300 ${
+											(servingTeam === 1 && matchData.rightTeam !== matchData.firstTeamName) ||
+											(servingTeam === 2 && matchData.rightTeam === matchData.firstTeamName)
+												? 'right-[20%]'
+												: 'left-[20%]'
+										} ${
+											serviceCourt === 'right' ? 'top-[25%]' : 'top-[65%]'
+										}`}>
+											<div className="bg-white/80 backdrop-blur-md p-3 md:p-4 rounded-xl shadow-xl border-2 border-gray-200 transform hover:scale-105 transition-all duration-300">
+												<p className="text-gray-800 text-base md:text-xl lg:text-2xl font-bold tracking-wide">
+													{servingTeam === 1 
+														? (receiverPlayer === matchData?.playerTwo ? matchData?.playerFour : matchData?.playerTwo)
+														: (receiverPlayer === matchData?.playerOne ? matchData?.playerThree : matchData?.playerOne)
+													}
+												</p>
+												{(servingTeam === 1 ? matchData?.secondTeamName : matchData?.firstTeamName) && (
+													<p className="text-gray-600 text-sm md:text-base lg:text-lg font-medium mt-1">
+														({servingTeam === 1 ? matchData?.secondTeamName : matchData?.firstTeamName})
+													</p>
+												)}
+											</div>
+										</div>
+									)}
+
+									{/* Service Direction Arrow */}
+									<div className={`absolute ${
+										(servingTeam === 1 && matchData.rightTeam !== matchData.firstTeamName) ||
+										(servingTeam === 2 && matchData.rightTeam === matchData.firstTeamName)
+											? serviceCourt === 'right'
+												? 'left-[30%] top-[35%] w-[35%] rotate-[35deg]'
+												: 'left-[30%] top-[55%] w-[35%] rotate-[-35deg]'
+											: serviceCourt === 'right'
+												? 'right-[30%] top-[35%] w-[35%] rotate-[-35deg]'
+												: 'right-[30%] top-[55%] w-[35%] rotate-[35deg]'
+									} transform-gpu transition-all duration-300 flex items-center`}>
+										{/* Arrow body */}
+										<div className="h-6 bg-gradient-to-r from-orange-500 to-orange-600 rounded-sm flex-grow shadow-md"></div>
+										{/* Arrow head */}
+										<div className={`w-0 h-0 
+											border-t-[18px] border-t-transparent 
+											border-b-[18px] border-b-transparent
+											${(servingTeam === 1 && matchData.rightTeam !== matchData.firstTeamName) ||
+												(servingTeam === 2 && matchData.rightTeam === matchData.firstTeamName)
+												? 'border-l-[30px] border-l-orange-600 ml-[-3px]'
+												: 'border-r-[30px] border-r-orange-600 order-first mr-[-3px]'
+											} drop-shadow-md`}>
+										</div>
+									</div>
+								</>
+							)}
 
 							{/* Score buttons for individual players on left side */}
 							{matchData?.playerThree && matchData?.playerThree !== "" ? (
-								<div className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] flex flex-col gap-4">
+								<div className="absolute top-1/2 transform -translate-y-1/2 -left-40 flex flex-col gap-8 md:gap-12 lg:gap-16">
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
-												matchData?.firstTeamName === matchData?.receiver
-													? matchData?.playerOne
-													: matchData?.playerTwo;
-											handleButtonClick(`left`, player);
+												matchData.rightTeam === matchData.firstTeamName
+													? matchData?.playerTwo
+													: matchData?.playerOne;
+											handleButtonClick("left", player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver
-											? matchData?.playerOne
-											: matchData?.playerTwo}{" "}
+										{matchData.rightTeam === matchData.firstTeamName
+											? matchData?.playerTwo
+											: matchData?.playerOne}{" "}
 										Score
 									</button>
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
-												matchData?.firstTeamName === matchData?.receiver
-													? matchData?.playerThree
-													: matchData?.playerFour;
-											handleButtonClick(`left`, player);
+												matchData.rightTeam === matchData.firstTeamName
+													? matchData?.playerFour
+													: matchData?.playerThree;
+											handleButtonClick("left", player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver
-											? matchData?.playerThree
-											: matchData?.playerFour}{" "}
+										{matchData.rightTeam === matchData.firstTeamName
+											? matchData?.playerFour
+											: matchData?.playerThree}{" "}
 										Score
 									</button>
 								</div>
 							) : (
 								<button
-									className="absolute top-1/2 transform -translate-y-1/2 left-[-4rem] xl:left-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
+									className="absolute top-1/2 transform -translate-y-1/2 -left-40 p-4 xl:p-6 rounded-2xl text-2xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg backdrop-blur-sm font-semibold"
 									onClick={() => {
 										const player =
-											matchData?.firstTeamName === matchData?.receiver
-												? matchData?.playerOne
-												: matchData?.playerTwo;
+											matchData.rightTeam === matchData.firstTeamName
+												? matchData?.playerTwo
+												: matchData?.playerOne;
 										handleButtonClick("left", player);
 									}}
 									disabled={!matchStarted}
@@ -2173,148 +2272,50 @@ function ScorePage() {
 								</button>
 							)}
 
-							{/* Left side of the court */}
-							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
-								{matchData?.firstTeamName === matchData?.receiver ? (
-									<>
-										{/* First team on left side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerOne}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.firstTeamName})
-											</p>
-										</div>
-										{matchData?.playerThree && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerThree}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.firstTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								) : (
-									<>
-										{/* Second team on left side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerTwo}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.secondTeamName})
-											</p>
-										</div>
-										{matchData?.playerFour && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerFour}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.secondTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								)}
-							</div>
-
-							{/* Right side of the court */}
-							<div className="w-1/2 text-white flex flex-col justify-evenly items-center">
-								{matchData?.firstTeamName === matchData?.receiver ? (
-									<>
-										{/* Second team on right side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerTwo}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.secondTeamName})
-											</p>
-										</div>
-										{matchData?.playerFour && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerFour}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.secondTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								) : (
-									<>
-										{/* First team on right side */}
-										<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-											<h1 className="text-xl xl:text-3xl">
-												{matchData?.playerOne}
-											</h1>
-											<p className="text-xl md:text-3xl xl:text-[3rem]">
-												({matchData?.firstTeamName})
-											</p>
-										</div>
-										{matchData?.playerThree && (
-											<div className="text-center flex flex-col gap-0 xl:gap-4 max-w-48">
-												<h1 className="text-xl xl:text-3xl">
-													{matchData?.playerThree}
-												</h1>
-												<p className="text-xl md:text-3xl xl:text-[3rem]">
-													({matchData?.firstTeamName})
-												</p>
-											</div>
-										)}
-									</>
-								)}
-							</div>
-
-							{/* Score buttons for individual players on right side */}
+							{/* Right side score buttons */}
 							{matchData?.playerFour && matchData?.playerFour !== "" ? (
-								<div className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] flex flex-col gap-4">
+								<div className="absolute top-1/2 transform -translate-y-1/2 -right-40 flex flex-col gap-8 md:gap-12 lg:gap-16">
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
-												matchData?.firstTeamName === matchData?.receiver
-													? matchData?.playerTwo
-													: matchData?.playerOne;
+												matchData.rightTeam === matchData.firstTeamName
+													? matchData?.playerOne
+													: matchData?.playerTwo;
 											handleButtonClick("right", player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver
-											? matchData?.playerTwo
-											: matchData?.playerOne}{" "}
+										{matchData.rightTeam === matchData.firstTeamName
+											? matchData?.playerOne
+											: matchData?.playerTwo}{" "}
 										Score
 									</button>
 									<button
-										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb] shadow-lg min-w-[150px]"
+										className="p-4 xl:p-6 rounded-xl md:rounded-3xl text-sm md:text-xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg min-w-[150px] backdrop-blur-sm"
 										onClick={() => {
 											const player =
-												matchData?.firstTeamName === matchData?.receiver
-													? matchData?.playerFour
-													: matchData?.playerThree;
+												matchData.rightTeam === matchData.firstTeamName
+													? matchData?.playerThree
+													: matchData?.playerFour;
 											handleButtonClick("right", player);
 										}}
 										disabled={!matchStarted}
 									>
-										{matchData?.firstTeamName === matchData?.receiver
-											? matchData?.playerFour
-											: matchData?.playerThree}{" "}
+										{matchData.rightTeam === matchData.firstTeamName
+											? matchData?.playerThree
+											: matchData?.playerFour}{" "}
 										Score
 									</button>
 								</div>
 							) : (
 								<button
-									className="absolute top-1/2 transform -translate-y-1/2 right-[-4rem] xl:right-[-8rem] p-6 xl:p-10 rounded-xl md:rounded-3xl text-xl md:text-[3rem] text-white bg-[#7cb6cb] shadow-lg"
+									className="absolute top-1/2 transform -translate-y-1/2 -right-40 p-4 xl:p-6 rounded-2xl text-2xl text-white bg-[#7cb6cb]/90 hover:bg-[#7cb6cb] shadow-lg backdrop-blur-sm font-semibold"
 									onClick={() => {
 										const player =
-											matchData?.firstTeamName === matchData?.receiver
-												? matchData?.playerTwo
-												: matchData?.playerOne;
+											matchData.rightTeam === matchData.firstTeamName
+												? matchData?.playerOne
+												: matchData?.playerTwo;
 										handleButtonClick("right", player);
 									}}
 									disabled={!matchStarted}
@@ -2326,7 +2327,8 @@ function ScorePage() {
 					</div>
 				</div>
 				{/* score table */}
-				<div className="w-full md:w-[80%] m-auto">
+				<div className="w-full md:w-[80%] m-auto mt-8 mb-8">
+					<h2 className="text-2xl font-bold text-center mb-4 text-[#5ea0b8]">Match Score Sheet</h2>
 					<ScoreSheet
 						selectedPlayer={selectedPlayer}
 						misconduct={misconduct}

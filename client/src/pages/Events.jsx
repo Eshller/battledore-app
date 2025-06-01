@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import dayjs from "dayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -11,8 +11,37 @@ function Events() {
 	const [selectedDate, setSelectedDate] = useState(null);
 	const [numberofDays, setNumberofDays] = useState("");
 	const [isVisible, setIsVisible] = useState(false);
+	const calendarRef = useRef(null);
+	const formRef = useRef(null);
 
 	const { setEvent, myData } = useService();
+
+	// Add click outside handlers
+	useEffect(() => {
+		function handleClickOutside(event) {
+			// Handle calendar click outside
+			if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+				setShowCalendar(false);
+			}
+			// Handle form click outside
+			if (formRef.current && !formRef.current.contains(event.target) && isVisible) {
+				setIsVisible(false);
+				setSelectedDate(null);
+				setEvents({
+					eventTitle: "",
+					eventStart: "",
+					eventEnd: "",
+					eventDesc: "",
+				});
+				setNumberofDays("");
+			}
+		}
+
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, [isVisible]);
 
 	const [events, setEvents] = useState({
 		eventTitle: "",
@@ -137,7 +166,7 @@ function Events() {
 
 			{/* Calendar and Form Overlays */}
 			{showCalendar && myData.isOperator && (
-				<div className="absolute right-4 z-50 mt-2">
+				<div className="absolute right-4 z-50 mt-2" ref={calendarRef}>
 					<div className="bg-white rounded-xl shadow-xl overflow-hidden">
 						<LocalizationProvider dateAdapter={AdapterDayjs}>
 							<DateCalendar
@@ -168,6 +197,7 @@ function Events() {
 			{selectedDate && isVisible && (
 				<div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
 					<form
+						ref={formRef}
 						onSubmit={handleSubmit}
 						className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg space-y-6"
 					>
